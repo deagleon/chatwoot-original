@@ -28,11 +28,8 @@ class InstallationConfig < ApplicationRecord
     OTEL_PROVIDER
   ]).freeze
 
-  # https://stackoverflow.com/questions/72970170/upgrading-to-rails-6-1-6-1-causes-psychdisallowedclass-tried-to-load-unspecif
-  # https://discuss.rubyonrails.org/t/cve-2022-32224-possible-rce-escalation-bug-with-serialized-columns-in-active-record/81017
-  # FIX ME : fixes breakage of installation config. we need to migrate.
-  # Fix configuration in application.rb
-  serialize :serialized_value, coder: YAML, type: ActiveSupport::HashWithIndifferentAccess, default: {}.with_indifferent_access
+  # serialized_value is a jsonb column. Keep access through `value` / `value=` helpers
+  # and avoid YAML deserialization over jsonb payloads.
 
   before_validation :set_lock
   validates :name, presence: true
@@ -46,13 +43,16 @@ class InstallationConfig < ApplicationRecord
   after_commit :clear_cache
 
   def value
-    serialized_value[:value]
+    return nil if serialized_value.blank?
+
+    data = serialized_value
+    data = YAML.safe_load(data) if data.is_a?(String)
+    data = data.with_indifferent_access if data.respond_to?(:with_indifferent_access)
+    data[:value]
   end
 
   def value=(value_to_assigned)
-    self.serialized_value = {
-      value: value_to_assigned
-    }.with_indifferent_access
+    self.serialized_value = { value: value_to_assigned }
   end
 
   private
