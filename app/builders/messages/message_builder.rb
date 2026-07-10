@@ -22,6 +22,10 @@ class Messages::MessageBuilder
   end
 
   def perform
+    # Bridges (Evolution/Baileys) may retry the same webhook; return existing message when source_id matches.
+    existing = existing_message_with_source_id
+    return existing if existing
+
     @message = @conversation.messages.build(message_params)
     process_attachments
     process_emails
@@ -34,13 +38,18 @@ class Messages::MessageBuilder
 
   private
 
+  def existing_message_with_source_id
+    return if @params[:source_id].blank?
+
+    @conversation.messages.find_by(source_id: @params[:source_id])
+  end
+
   # Extracts content attributes from the given params.
   # - Converts ActionController::Parameters to a regular hash if needed.
   # - Attempts to parse a JSON string if content is a string.
   # - Returns an empty hash if content is not present, if there's a parsing error, or if it's an unexpected type.
   def content_attributes
-    params = convert_to_hash(@params)
-    content_attributes = params.fetch(:content_attributes, {})
+    content_attributes = convert_to_hash(@params).fetch(:content_attributes, {})
 
     return safe_parse_json(content_attributes) if content_attributes.is_a?(String)
     return content_attributes if content_attributes.is_a?(Hash)
@@ -77,14 +86,12 @@ class Messages::MessageBuilder
   end
 
   def process_emails
-    return unless @conversation.inbox&.inbox_type == 'Email'
+    return unless email_inbox?
 
     cc_emails = process_email_string(@params[:cc_emails])
     bcc_emails = process_email_string(@params[:bcc_emails])
     to_emails = process_email_string(@params[:to_emails])
-
-    all_email_addresses = cc_emails + bcc_emails + to_emails
-    validate_email_addresses(all_email_addresses)
+    validate_email_addresses(cc_emails + bcc_emails + to_emails)
 
     @message.content_attributes[:cc_emails] = cc_emails
     @message.content_attributes[:bcc_emails] = bcc_emails
@@ -94,9 +101,7 @@ class Messages::MessageBuilder
   def process_email_content
     return unless should_process_email_content?
 
-    @message.content_attributes ||= {}
-    email_attributes = build_email_attributes
-    @message.content_attributes[:email] = email_attributes
+    @message.content_attributes[:email] = build_email_attributes
   end
 
   def process_email_string(email_string)
@@ -172,12 +177,7 @@ class Messages::MessageBuilder
     processed_content = process_liquid_in_email_body(normalized_content)
 
     # Use custom HTML content if provided, otherwise generate from message content
-    email_attributes[:html_content] = if custom_email_content_provided?
-                                        build_custom_html_content
-                                      else
-                                        build_html_content(processed_content)
-                                      end
-
+    email_attributes[:html_content] = custom_email_content_provided? ? build_custom_html_content : build_html_content(processed_content)
     email_attributes[:text_content] = build_text_content(processed_content)
     email_attributes
   end
@@ -228,9 +228,7 @@ class Messages::MessageBuilder
   end
 
   def drops_with_sender
-    message_drops(@conversation).merge({
-                                         'agent' => UserDrop.new(sender)
-                                       })
+    message_drops(@conversation).merge('agent' => UserDrop.new(sender))
   end
 end
 
