@@ -16,9 +16,18 @@ describe Messages::MessageBuilder do
   end
 
   describe '#perform' do
-    it 'creates a message' do
-      message = message_builder
-      expect(message.content).to eq params[:content]
+    it 'creates a message and returns the same message when source_id is reused in the same conversation' do
+      params[:source_id] = 'source-id-123'
+
+      first_message = message_builder
+      expect(first_message).to be_persisted
+      expect(first_message.source_id).to eq('source-id-123')
+
+      second_message = nil
+      expect { second_message = described_class.new(user, conversation, params).perform }
+        .not_to change(Message, :count)
+      expect(second_message.id).to eq(first_message.id)
+      expect(second_message.source_id).to eq('source-id-123')
     end
   end
 
