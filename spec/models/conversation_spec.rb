@@ -18,11 +18,104 @@ RSpec.describe Conversation do
     it { is_expected.to belong_to(:assignee).optional }
     it { is_expected.to belong_to(:team).optional }
     it { is_expected.to belong_to(:campaign).optional }
+    it { is_expected.to belong_to(:pipeline_stage).optional }
   end
 
   describe 'concerns' do
     it_behaves_like 'assignment_handler'
     it_behaves_like 'auto_assignment_handler'
+  end
+
+  describe '#move_to_stage!' do
+    let(:account) { create(:account) }
+    let(:inbox) { create(:inbox, account: account) }
+    let(:conversation) do
+      create(:conversation, account: account, contact: create(:contact, account: account), inbox: inbox)
+    end
+    let(:pipeline) { create(:pipeline, account: account) }
+    let(:stage) { pipeline.pipeline_stages.first }
+
+    before do
+      allow(Rails.configuration.dispatcher).to receive(:dispatch)
+    end
+
+    it 'sets pipeline_stage_id' do
+      conversation.move_to_stage!(stage)
+      expect(conversation.reload.pipeline_stage_id).to eq(stage.id)
+    end
+
+    it 'sets pipeline_stage_changed_at' do
+      conversation.move_to_stage!(stage)
+      expect(conversation.reload.pipeline_stage_changed_at).to be_present
+    end
+
+    it 'does not alter status' do
+      original_status = conversation.status
+      conversation.move_to_stage!(stage)
+      expect(conversation.reload.status).to eq(original_status)
+    end
+
+    it 'does not alter assignee' do
+      conversation.move_to_stage!(stage)
+      expect(conversation.reload.assignee_id).to be_nil
+    end
+
+    it 'does not alter inbox' do
+      original_inbox_id = conversation.inbox_id
+      conversation.move_to_stage!(stage)
+      expect(conversation.reload.inbox_id).to eq(original_inbox_id)
+    end
+  end
+
+  describe 'pipeline_stage cross-account validation' do
+    let(:account) { create(:account) }
+    let(:other_account) { create(:account) }
+    let(:inbox) { create(:inbox, account: account) }
+    let(:conversation) do
+      create(:conversation, account: account, contact: create(:contact, account: account), inbox: inbox)
+    end
+    let(:other_pipeline) { create(:pipeline, account: other_account) }
+    let(:other_stage) { other_pipeline.pipeline_stages.first }
+
+    it 'rejects a stage from a different account' do
+      conversation.pipeline_stage = other_stage
+      expect(conversation).not_to be_valid
+      expect(conversation.errors[:pipeline_stage]).to be_present
+    end
+
+    it 'accepts a stage from the same account' do
+      pipeline = create(:pipeline, account: account)
+      conversation.pipeline_stage = pipeline.pipeline_stages.first
+      expect(conversation).to be_valid
+    end
+  end
+
+  describe 'pipeline_stage_changed_at callback' do
+    let(:account) { create(:account) }
+    let(:inbox) { create(:inbox, account: account) }
+    let(:conversation) do
+      create(:conversation, account: account, contact: create(:contact, account: account), inbox: inbox)
+    end
+    let(:pipeline) { create(:pipeline, account: account) }
+    let(:stage) { pipeline.pipeline_stages.first }
+
+    before do
+      allow(Rails.configuration.dispatcher).to receive(:dispatch)
+    end
+
+    it 'sets pipeline_stage_changed_at when pipeline_stage_id changes' do
+      conversation.update!(pipeline_stage: stage)
+      expect(conversation.reload.pipeline_stage_changed_at).to be_present
+    end
+
+    it 'does not change pipeline_stage_changed_at when pipeline_stage_id is unchanged' do
+      conversation.update!(pipeline_stage: stage)
+      original = conversation.reload.pipeline_stage_changed_at
+      travel_to(1.hour.from_now) do
+        conversation.update!(priority: :high)
+      end
+      expect(conversation.reload.pipeline_stage_changed_at).to eq(original)
+    end
   end
 
   describe '.before_create' do

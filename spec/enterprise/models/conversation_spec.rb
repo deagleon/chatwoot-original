@@ -5,6 +5,13 @@ RSpec.describe Conversation, type: :model do
     it { is_expected.to belong_to(:sla_policy).optional }
   end
 
+  describe '#list_of_keys' do
+    it 'includes pipeline_stage_id' do
+      conversation = build(:conversation)
+      expect(conversation.send(:list_of_keys)).to include('pipeline_stage_id')
+    end
+  end
+
   describe 'SLA policy updates' do
     let(:conversation) { create(:conversation) }
     let!(:sla_policy) { create(:sla_policy, account: conversation.account) }

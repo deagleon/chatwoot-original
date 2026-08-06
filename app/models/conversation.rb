@@ -2,34 +2,36 @@
 #
 # Table name: conversations
 #
-#  id                     :integer          not null, primary key
-#  additional_attributes  :jsonb
-#  agent_last_seen_at     :datetime
-#  assignee_last_seen_at  :datetime
-#  cached_label_list      :text
-#  contact_last_seen_at   :datetime
-#  custom_attributes      :jsonb
-#  first_reply_created_at :datetime
-#  identifier             :string
-#  last_activity_at       :datetime         not null
-#  priority               :integer
-#  snoozed_until          :datetime
-#  status                 :integer          default("open"), not null
-#  status_changed_at      :datetime
-#  uuid                   :uuid             not null
-#  waiting_since          :datetime
-#  created_at             :datetime         not null
-#  updated_at             :datetime         not null
-#  account_id             :integer          not null
-#  assignee_agent_bot_id  :bigint
-#  assignee_id            :integer
-#  campaign_id            :bigint
-#  contact_id             :bigint
-#  contact_inbox_id       :bigint
-#  display_id             :integer          not null
-#  inbox_id               :integer          not null
-#  sla_policy_id          :bigint
-#  team_id                :bigint
+#  id                        :integer          not null, primary key
+#  additional_attributes     :jsonb
+#  agent_last_seen_at        :datetime
+#  assignee_last_seen_at     :datetime
+#  cached_label_list         :text
+#  contact_last_seen_at      :datetime
+#  custom_attributes         :jsonb
+#  first_reply_created_at    :datetime
+#  identifier                :string
+#  last_activity_at          :datetime         not null
+#  pipeline_stage_changed_at :datetime
+#  priority                  :integer
+#  snoozed_until             :datetime
+#  status                    :integer          default("open"), not null
+#  status_changed_at         :datetime
+#  uuid                      :uuid             not null
+#  waiting_since             :datetime
+#  created_at                :datetime         not null
+#  updated_at                :datetime         not null
+#  account_id                :integer          not null
+#  assignee_agent_bot_id     :bigint
+#  assignee_id               :integer
+#  campaign_id               :bigint
+#  contact_id                :bigint
+#  contact_inbox_id          :bigint
+#  display_id                :integer          not null
+#  inbox_id                  :integer          not null
+#  pipeline_stage_id         :bigint
+#  sla_policy_id             :bigint
+#  team_id                   :bigint
 #
 # Indexes
 #
@@ -45,6 +47,7 @@
 #  index_conversations_on_id_and_account_id           (account_id,id)
 #  index_conversations_on_identifier_and_account_id   (identifier,account_id)
 #  index_conversations_on_inbox_id                    (inbox_id)
+#  index_conversations_on_pipeline_stage_id           (pipeline_stage_id)
 #  index_conversations_on_priority                    (priority)
 #  index_conversations_on_status_and_account_id       (status,account_id)
 #  index_conversations_on_status_and_priority         (status,priority)
@@ -81,6 +84,7 @@ class Conversation < ApplicationRecord
   validates :custom_attributes, jsonb_attributes_length: true
   validates :uuid, uniqueness: true
   validate :validate_referer_url
+  validate :validate_pipeline_stage_account
 
   enum status: { open: 0, resolved: 1, pending: 2, snoozed: 3 }
   enum priority: { low: 0, medium: 1, high: 2, urgent: 3 }
@@ -118,6 +122,7 @@ class Conversation < ApplicationRecord
   belongs_to :contact_inbox
   belongs_to :team, optional: true
   belongs_to :campaign, optional: true
+  belongs_to :pipeline_stage, class_name: 'PipelineStage', optional: true, inverse_of: :conversations
 
   has_many :mentions, dependent: :destroy_async
   has_many :messages, dependent: :destroy_async, autosave: true
@@ -130,6 +135,7 @@ class Conversation < ApplicationRecord
 
   before_save :ensure_snooze_until_reset
   before_save :set_status_changed_at
+  before_save :set_pipeline_stage_changed_at
   before_create :determine_conversation_status
   before_create :ensure_waiting_since
 
@@ -173,6 +179,10 @@ class Conversation < ApplicationRecord
   def toggle_priority(priority = nil)
     self.priority = priority.presence
     save
+  end
+
+  def move_to_stage!(stage)
+    update!(pipeline_stage: stage)
   end
 
   def bot_handoff!(dispatch_event: true)
@@ -285,6 +295,10 @@ class Conversation < ApplicationRecord
     self.status_changed_at = Time.current if new_record? || status_changed?
   end
 
+  def set_pipeline_stage_changed_at
+    self.pipeline_stage_changed_at = Time.current if new_record? || pipeline_stage_id_changed?
+  end
+
   def ensure_waiting_since
     self.waiting_since = created_at
   end
@@ -337,7 +351,7 @@ class Conversation < ApplicationRecord
 
   def list_of_keys
     %w[team_id assignee_id assignee_agent_bot_id status snoozed_until custom_attributes label_list waiting_since
-       first_reply_created_at priority]
+       first_reply_created_at priority pipeline_stage_id]
   end
 
   def allowed_keys?
@@ -418,6 +432,13 @@ class Conversation < ApplicationRecord
     return unless additional_attributes['referer']
 
     self['additional_attributes']['referer'] = nil unless url_valid?(additional_attributes['referer'])
+  end
+
+  def validate_pipeline_stage_account
+    return if pipeline_stage_id.blank?
+    return if pipeline_stage&.pipeline&.account_id == account_id
+
+    errors.add(:pipeline_stage, 'must belong to the same account')
   end
 
   # creating db triggers
