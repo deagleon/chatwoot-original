@@ -16,7 +16,7 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(['dragstart', 'dragend', 'open']);
+const emit = defineEmits(['open']);
 
 const { t } = useI18n();
 
@@ -67,11 +67,6 @@ const ariaLabel = computed(
 const onDragStart = e => {
   e.dataTransfer.effectAllowed = 'move';
   e.dataTransfer.setData('text/plain', String(props.conversation.id));
-  emit('dragstart', props.conversation.id);
-};
-
-const onDragEnd = () => {
-  emit('dragend');
 };
 
 const onKeydown = e => {
@@ -90,7 +85,6 @@ const onKeydown = e => {
     :aria-label="ariaLabel"
     class="flex flex-col gap-2 p-3 rounded-lg bg-n-solid-1 border border-n-weak cursor-grab hover:border-n-strong transition-colors duration-150 motion-reduce:transition-none focus:outline-none focus:ring-2 focus:ring-n-brand"
     @dragstart="onDragStart"
-    @dragend="onDragEnd"
     @click="emit('open', conversation)"
     @keydown="onKeydown"
   >

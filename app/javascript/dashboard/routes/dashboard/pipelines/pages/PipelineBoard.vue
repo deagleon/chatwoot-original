@@ -31,14 +31,11 @@ const labels = useMapGetter('labels/getLabels');
 
 const pipelineId = computed(() => route.params.pipelineId);
 
-const pipeline = ref(null);
 const stages = ref([]);
 const conversationsByStage = reactive({});
 const loadingByStage = reactive({});
 const hasMoreByStage = reactive({});
 const pageByStage = reactive({});
-const dragOverStageId = ref(null);
-const draggingConversationId = ref(null);
 const selectedConversation = ref(null);
 const isLoading = ref(false);
 
@@ -73,7 +70,6 @@ const fetchPipeline = async () => {
   isLoading.value = true;
   try {
     const response = await PipelinesAPI.show(pipelineId.value);
-    pipeline.value = response.data;
     stages.value = (response.data.stages ?? []).sort(
       (a, b) => a.position - b.position
     );
@@ -125,9 +121,6 @@ const fetchAllColumns = () => {
 };
 
 const handleDrop = async ({ stageId, conversationId }) => {
-  dragOverStageId.value = null;
-  draggingConversationId.value = null;
-
   if (!conversationId) return;
 
   const fromStage = stages.value.find(s =>
@@ -167,14 +160,6 @@ const handleDrop = async ({ stageId, conversationId }) => {
   }
 };
 
-const onCardDragStart = conversationId => {
-  draggingConversationId.value = conversationId;
-};
-
-const onCardDragEnd = () => {
-  draggingConversationId.value = null;
-};
-
 const openCard = conversation => {
   selectedConversation.value = conversation;
 };
@@ -199,10 +184,6 @@ const onSearchInput = () => {
   searchDebounce = setTimeout(() => {
     fetchAllColumns();
   }, 400);
-};
-
-const onFilterChange = () => {
-  fetchAllColumns();
 };
 
 // Real-time: react to conversation.updated events from ActionCable
@@ -249,20 +230,13 @@ onBeforeUnmount(() => {
 });
 
 watch(
-  () => filters.inbox_ids,
-  () => onFilterChange()
-);
-watch(
-  () => filters.assignee_id,
-  () => onFilterChange()
-);
-watch(
-  () => filters.label,
-  () => onFilterChange()
-);
-watch(
-  () => filters.status,
-  () => onFilterChange()
+  [
+    () => filters.inbox_ids,
+    () => filters.assignee_id,
+    () => filters.label,
+    () => filters.status,
+  ],
+  () => fetchAllColumns()
 );
 </script>
 
@@ -351,10 +325,7 @@ watch(
         :conversations="conversationsByStage[stage.id] ?? []"
         :loading="!!loadingByStage[stage.id]"
         :has-more="!!hasMoreByStage[stage.id]"
-        :is-drag-over="dragOverStageId === stage.id"
         @drop="handleDrop"
-        @card-dragstart="onCardDragStart"
-        @card-dragend="onCardDragEnd"
         @open-card="openCard"
         @load-more="loadMore"
       />

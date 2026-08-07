@@ -1,5 +1,4 @@
 <script setup>
-import { ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 import Icon from 'dashboard/components-next/icon/Icon.vue';
@@ -22,42 +21,11 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
-  isDragOver: {
-    type: Boolean,
-    default: false,
-  },
 });
 
-const emit = defineEmits([
-  'drop',
-  'card-dragstart',
-  'card-dragend',
-  'open-card',
-  'load-more',
-  'add-stage',
-  'editStage',
-  'delete-stage',
-]);
+const emit = defineEmits(['drop', 'open-card', 'load-more']);
 
 const { t } = useI18n();
-
-const isEditingName = ref(false);
-const editedName = ref('');
-
-const startEditName = () => {
-  editedName.value = props.stage.name;
-  isEditingName.value = true;
-};
-
-const saveName = () => {
-  if (editedName.value.trim() && editedName.value !== props.stage.name) {
-    emit('editStage', {
-      stageId: props.stage.id,
-      name: editedName.value.trim(),
-    });
-  }
-  isEditingName.value = false;
-};
 
 const onDrop = e => {
   e.preventDefault();
@@ -77,7 +45,6 @@ const onDragOver = e => {
 <template>
   <div
     class="flex flex-col w-[280px] flex-shrink-0 h-full rounded-lg bg-n-solid-2 border border-n-weak transition-colors duration-150 motion-reduce:transition-none"
-    :class="{ 'ring-2 ring-n-brand': isDragOver }"
     role="list"
     :aria-label="stage.name"
     @dragover="onDragOver"
@@ -89,19 +56,9 @@ const onDragOver = e => {
         class="inline-block w-2 h-2 rounded-full flex-shrink-0"
         :style="{ backgroundColor: stage.color }"
       />
-      <input
-        v-if="isEditingName"
-        v-model="editedName"
-        class="flex-1 text-sm font-medium bg-transparent border-none outline-none text-n-slate-12 focus:ring-1 focus:ring-n-brand rounded px-1"
-        @blur="saveName"
-        @keydown.enter="saveName"
-        @keydown.esc="isEditingName = false"
-      />
       <span
-        v-else
-        class="flex-1 text-sm font-medium truncate text-n-slate-12 cursor-pointer"
+        class="flex-1 text-sm font-medium truncate text-n-slate-12"
         :title="stage.name"
-        @dblclick="startEditName"
       >
         {{ stage.name }}
       </span>
@@ -112,20 +69,6 @@ const onDragOver = e => {
           })
         }}
       </span>
-      <button
-        class="flex items-center justify-center size-5 rounded text-n-slate-11 hover:bg-n-alpha-2 transition-colors motion-reduce:transition-none"
-        :aria-label="t('PIPELINES.BOARD.COLUMN.ADD_STAGE')"
-        @click="emit('add-stage')"
-      >
-        <Icon icon="i-lucide-plus" class="size-3.5" />
-      </button>
-      <button
-        class="flex items-center justify-center size-5 rounded text-n-slate-11 hover:bg-n-alpha-2 transition-colors motion-reduce:transition-none"
-        :aria-label="t('PIPELINES.BOARD.COLUMN.DELETE_STAGE')"
-        @click="emit('delete-stage', stage)"
-      >
-        <Icon icon="i-lucide-more-horizontal" class="size-3.5" />
-      </button>
     </div>
 
     <!-- Cards -->
@@ -145,8 +88,6 @@ const onDragOver = e => {
           :key="conversation.id"
           :conversation="conversation"
           :stage="stage"
-          @dragstart="id => emit('card-dragstart', id)"
-          @dragend="() => emit('card-dragend')"
           @open="conv => emit('open-card', conv)"
         />
         <div

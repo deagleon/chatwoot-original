@@ -15,9 +15,6 @@
       "TITLE": "No pipelines yet",
       "SUBTITLE": "Create your first pipeline to organize conversations into stages."
     },
-    "SEARCH_EMPTY": "No pipelines found",
-    "LOADING": "Loading pipelines...",
-    "ERROR": "Failed to load pipelines. Please try again.",
     "FORM": {
       "CREATE_TITLE": "Create pipeline",
       "EDIT_TITLE": "Edit pipeline",
@@ -46,7 +43,6 @@
     "CONVERSATIONS_COUNT": "{count} conversations",
     "STAGES_COUNT": "{count} stages",
     "BOARD": {
-      "STUB": "Pipeline board coming soon",
       "TITLE": "Pipeline Board",
       "LOADING": "Loading board...",
       "ERROR": "Failed to load board. Please try again.",
