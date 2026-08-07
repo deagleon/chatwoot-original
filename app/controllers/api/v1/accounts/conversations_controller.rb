@@ -103,6 +103,11 @@ class Api::V1::Accounts::ConversationsController < Api::V1::Accounts::BaseContro
     head :ok
   end
 
+  def pipeline_stage
+    stage = Current.account.pipeline_stages.find(params[:pipeline_stage_id])
+    @conversation.move_to_stage!(stage)
+  end
+
   def toggle_typing_status
     typing_status_manager = ::Conversations::TypingStatusManager.new(@conversation, Current.user, params)
     typing_status_manager.toggle_typing_status

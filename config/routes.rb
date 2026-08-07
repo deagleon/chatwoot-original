@@ -143,6 +143,15 @@ Rails.application.routes.draw do
           namespace :channels do
             resource :twilio_channel, only: [:create]
           end
+          resources :pipelines, only: [:index, :create, :show, :update, :destroy] do
+            scope module: :pipelines do
+              resources :stages, only: [:create, :update, :destroy] do
+                member do
+                  get :conversations
+                end
+              end
+            end
+          end
           resources :conversations, only: [:index, :create, :show, :update, :destroy] do
             collection do
               get :meta
@@ -171,6 +180,7 @@ Rails.application.routes.draw do
               post :toggle_priority
               post :toggle_typing_status
               post :update_last_seen
+              post :pipeline_stage
               post :unread
               post :custom_attributes
               post :destroy_custom_attributes
