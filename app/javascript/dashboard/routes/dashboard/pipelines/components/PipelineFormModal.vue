@@ -70,7 +70,7 @@ const handleSubmit = async () => {
   }
 };
 
-defineExpose({ open, close });
+defineExpose({ open });
 </script>
 
 <template>

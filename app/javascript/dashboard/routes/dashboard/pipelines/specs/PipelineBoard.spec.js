@@ -110,15 +110,8 @@ const mountComponent = () =>
         Icon: { template: '<span />' },
         SidePanel: { template: '<div />' },
         PipelineBoardColumn: {
-          props: ['stage', 'conversations', 'loading', 'hasMore', 'isDragOver'],
-          emits: [
-            'drop',
-            'card-dragstart',
-            'card-dragend',
-            'open-card',
-            'move-card',
-            'load-more',
-          ],
+          props: ['stage', 'conversations', 'loading', 'hasMore'],
+          emits: ['drop', 'open-card', 'load-more'],
           template:
             '<div data-testid="column" :data-stage-id="stage.id" @drop="$emit(\'drop\', { stageId: stage.id, conversationId: 100 })" />',
         },
@@ -171,14 +164,15 @@ describe('PipelineBoard', () => {
     const wrapper = mountComponent();
     await flushPromises();
 
-    const column = wrapper.find('[data-testid="column"]');
-    await column.trigger('drop');
+    // Drop on the second column (stage 20) — conversation 100 lives in stage 10
+    const columns = wrapper.findAll('[data-testid="column"]');
+    await columns[1].trigger('drop');
 
     await flushPromises();
 
     expect(mockMoveToStage).toHaveBeenCalledWith({
       conversationId: 100,
-      pipelineStageId: 10,
+      pipelineStageId: 20,
     });
   });
 

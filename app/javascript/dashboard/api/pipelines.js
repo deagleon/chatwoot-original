@@ -12,20 +12,6 @@ class PipelinesAPI extends ApiClient {
       { params }
     );
   }
-
-  createStage(pipelineId, data) {
-    return axios.post(`${this.url}/${pipelineId}/stages`, { stage: data });
-  }
-
-  updateStage(pipelineId, stageId, data) {
-    return axios.patch(`${this.url}/${pipelineId}/stages/${stageId}`, {
-      stage: data,
-    });
-  }
-
-  deleteStage(pipelineId, stageId) {
-    return axios.delete(`${this.url}/${pipelineId}/stages/${stageId}`);
-  }
 }
 
 export default new PipelinesAPI();
