@@ -100,6 +100,13 @@ const hasDataImport = computed(() => {
   );
 });
 
+const hasPipelines = computed(() => {
+  return isFeatureEnabledonAccount.value(
+    accountId.value,
+    FEATURE_FLAGS.PIPELINES
+  );
+});
+
 const fetchConversationUnreadCounts = ([currentAccountId, isEnabled]) => {
   if (!currentAccountId) return;
 
@@ -579,6 +586,17 @@ const menuItems = computed(() => {
             icon: 'i-lucide-phone',
             to: accountScopedRoute('calls_dashboard_index'),
             activeOn: ['calls_dashboard_index'],
+          },
+        ]
+      : []),
+    ...(hasPipelines.value
+      ? [
+          {
+            name: 'Pipelines',
+            label: t('SIDEBAR.PIPELINES'),
+            icon: 'i-lucide-kanban',
+            to: accountScopedRoute('pipelines_index'),
+            activeOn: ['pipelines_index', 'pipelines_board'],
           },
         ]
       : []),
