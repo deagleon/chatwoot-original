@@ -62,6 +62,12 @@ class ConversationApi extends ApiClient {
     });
   }
 
+  moveToStage({ conversationId, pipelineStageId }) {
+    return axios.post(`${this.url}/${conversationId}/pipeline_stage`, {
+      pipeline_stage_id: pipelineStageId,
+    });
+  }
+
   assignAgent({ conversationId, agentId, assigneeType }) {
     return axios.post(`${this.url}/${conversationId}/assignments`, {
       assignee_id: agentId,
