@@ -171,5 +171,25 @@ RSpec.describe 'Pipeline API', type: :request do
 
       expect(response).to have_http_status(:not_found)
     end
+
+    context 'real-time dispatch' do
+      it 'emits CONVERSATION_UPDATED with pipeline_stage_id in changed_attributes' do
+        allow(Rails.configuration.dispatcher).to receive(:dispatch)
+
+        post "/api/v1/accounts/#{account.id}/conversations/#{conversation.display_id}/pipeline_stage",
+             headers: admin.create_new_auth_token,
+             params: { pipeline_stage_id: target_stage.id }, as: :json
+
+        expect(response).to have_http_status(:success)
+        expect(Rails.configuration.dispatcher).to have_received(:dispatch).with(
+          Events::Types::CONVERSATION_UPDATED,
+          kind_of(Time),
+          conversation: kind_of(Conversation),
+          notifiable_assignee_change: anything,
+          changed_attributes: hash_including('pipeline_stage_id' => anything),
+          performed_by: anything
+        )
+      end
+    end
   end
 end

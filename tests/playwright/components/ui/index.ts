@@ -6,3 +6,4 @@ export { SettingsInboxPage } from './settings-inbox-page.component';
 export { ChannelSelector } from './channel-selector.component';
 export { ApiChannelForm } from './api-channel-form.component';
 export { FinishSetup } from './finish-setup.component';
+export { PipelineBoard } from './pipeline-board.component';
