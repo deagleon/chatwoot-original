@@ -98,9 +98,9 @@ class Api::V1::Accounts::ConversationsController < Api::V1::Accounts::BaseContro
     @conversation.status == 'pending' && params[:status] == 'open'
   end
 
-  def toggle_priority
-    @conversation.toggle_priority(params[:priority])
-    head :ok
+  def pipeline_stage
+    stage = Current.account.pipeline_stages.find(params[:pipeline_stage_id])
+    @conversation.move_to_stage!(stage)
   end
 
   def toggle_typing_status
