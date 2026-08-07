@@ -262,4 +262,80 @@ RSpec.describe 'Conversations API', type: :request do
       end
     end
   end
+
+  describe 'POST /api/v1/accounts/:account_id/conversations/:id/pipeline_stage' do
+    let!(:account) { create(:account) }
+    let!(:admin) { create(:user, account: account, role: :administrator) }
+    let!(:agent) { create(:user, account: account, role: :agent) }
+    let!(:pipeline) { create(:pipeline, account: account) }
+    let!(:source_stage) { pipeline.pipeline_stages.first }
+    let!(:target_stage) { pipeline.pipeline_stages.second }
+    let!(:conversation) { create(:conversation, account: account, pipeline_stage: source_stage) }
+
+    before do
+      account.enable_features!('pipeline')
+    end
+
+    context 'when agent has conversation_participating_manage without participation' do
+      before do
+        create(:inbox_member, user: agent, inbox: conversation.inbox)
+        custom_role = create(:custom_role, account: account, permissions: ['conversation_participating_manage'])
+        account.account_users.find_by(user_id: agent.id).update!(custom_role: custom_role)
+      end
+
+      it 'returns unauthorized' do
+        post "/api/v1/accounts/#{account.id}/conversations/#{conversation.display_id}/pipeline_stage",
+             headers: agent.create_new_auth_token,
+             params: { pipeline_stage_id: target_stage.id }, as: :json
+
+        expect(response).to have_http_status(:unauthorized)
+        expect(conversation.reload.pipeline_stage_id).to eq(source_stage.id)
+      end
+    end
+
+    context 'when agent is assigned to the conversation' do
+      before do
+        conversation.update!(assignee: agent)
+        custom_role = create(:custom_role, account: account, permissions: ['conversation_participating_manage'])
+        account.account_users.find_by(user_id: agent.id).update!(custom_role: custom_role)
+      end
+
+      it 'moves the conversation to the target stage' do
+        post "/api/v1/accounts/#{account.id}/conversations/#{conversation.display_id}/pipeline_stage",
+             headers: agent.create_new_auth_token,
+             params: { pipeline_stage_id: target_stage.id }, as: :json
+
+        expect(response).to have_http_status(:success)
+        expect(conversation.reload.pipeline_stage_id).to eq(target_stage.id)
+      end
+    end
+
+    context 'when agent is a conversation participant' do
+      before do
+        create(:conversation_participant, conversation: conversation, account: account, user: agent)
+        custom_role = create(:custom_role, account: account, permissions: ['conversation_participating_manage'])
+        account.account_users.find_by(user_id: agent.id).update!(custom_role: custom_role)
+      end
+
+      it 'moves the conversation to the target stage' do
+        post "/api/v1/accounts/#{account.id}/conversations/#{conversation.display_id}/pipeline_stage",
+             headers: agent.create_new_auth_token,
+             params: { pipeline_stage_id: target_stage.id }, as: :json
+
+        expect(response).to have_http_status(:success)
+        expect(conversation.reload.pipeline_stage_id).to eq(target_stage.id)
+      end
+    end
+
+    context 'when administrator' do
+      it 'moves the conversation to the target stage' do
+        post "/api/v1/accounts/#{account.id}/conversations/#{conversation.display_id}/pipeline_stage",
+             headers: admin.create_new_auth_token,
+             params: { pipeline_stage_id: target_stage.id }, as: :json
+
+        expect(response).to have_http_status(:success)
+        expect(conversation.reload.pipeline_stage_id).to eq(target_stage.id)
+      end
+    end
+  end
 end
