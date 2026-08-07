@@ -1,0 +1,82 @@
+{
+  "PIPELINES": {
+    "HEADER": {
+      "TITLE": "Pipelines",
+      "NEW_PIPELINE": "New pipeline",
+      "SEARCH_PLACEHOLDER": "Search pipelines"
+    },
+    "TABLE": {
+      "NAME": "Name",
+      "STAGES": "Stages",
+      "CONVERSATIONS": "Conversations",
+      "ACTIONS": "Actions"
+    },
+    "EMPTY_STATE": {
+      "TITLE": "No pipelines yet",
+      "SUBTITLE": "Create your first pipeline to organize conversations into stages."
+    },
+    "FORM": {
+      "CREATE_TITLE": "Create pipeline",
+      "EDIT_TITLE": "Edit pipeline",
+      "NAME": {
+        "LABEL": "Name",
+        "PLACEHOLDER": "Enter pipeline name",
+        "ERROR": "Name is required"
+      },
+      "SUBMIT": "Create",
+      "UPDATE": "Save",
+      "CANCEL": "Cancel",
+      "CREATE_SUCCESS": "Pipeline created successfully",
+      "UPDATE_SUCCESS": "Pipeline updated successfully",
+      "ERROR_MESSAGE": "Failed to save pipeline. Please try again."
+    },
+    "DELETE": {
+      "TITLE": "Delete pipeline",
+      "DESCRIPTION": "Are you sure you want to delete this pipeline? This action cannot be undone.",
+      "CONFIRM": "Delete",
+      "SUCCESS": "Pipeline deleted successfully",
+      "ERROR_MESSAGE": "Failed to delete pipeline. Please try again."
+    },
+    "SHOW_ARCHIVED": "Show archived",
+    "HIDE_ARCHIVED": "Hide archived",
+    "ARCHIVED": "Archived",
+    "CONVERSATIONS_COUNT": "{count} conversations",
+    "STAGES_COUNT": "{count} stages",
+    "BOARD": {
+      "TITLE": "Pipeline Board",
+      "LOADING": "Loading board...",
+      "ERROR": "Failed to load board. Please try again.",
+      "LOAD_MORE": "Load more",
+      "MOVE_ERROR": "Failed to move conversation. Please try again.",
+      "FILTER": {
+        "INBOX": "Inbox",
+        "ALL_INBOXES": "All inboxes",
+        "ASSIGNEE": "Assignee",
+        "ALL_ASSIGNEES": "All assignees",
+        "LABEL": "Label",
+        "STATUS": "Status",
+        "ALL_STATUSES": "All statuses",
+        "SEARCH_PLACEHOLDER": "Search conversations..."
+      },
+      "COLUMN": {
+        "ADD_STAGE": "Add stage",
+        "EMPTY": "No conversations",
+        "EDIT_NAME": "Edit stage name",
+        "DELETE_STAGE": "Delete stage",
+        "DELETE_CONFIRM": "Are you sure you want to delete this stage?",
+        "CONVERSATIONS_COUNT": "{count}"
+      },
+      "CARD": {
+        "DAYS_IN_STAGE": "{days}d in stage",
+        "TODAY_IN_STAGE": "Today",
+        "OPEN_CONVERSATION": "Open conversation",
+        "MOVE_TO": "Move to",
+        "SCHEDULED": "Scheduled",
+        "ID": "ID"
+      },
+      "DRAWER": {
+        "OPEN": "Open conversation"
+      }
+    }
+  }
+}
