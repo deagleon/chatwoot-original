@@ -104,6 +104,7 @@ class Api::V1::Accounts::ConversationsController < Api::V1::Accounts::BaseContro
   end
 
   def pipeline_stage
+    authorize @conversation, :update?
     stage = Current.account.pipeline_stages.find(params[:pipeline_stage_id])
     @conversation.move_to_stage!(stage)
   end
