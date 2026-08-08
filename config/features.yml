@@ -276,3 +276,7 @@
   display_name: Pipeline
   enabled: false
   column: feature_flags_ext_1
+- name: scheduled_messages
+  display_name: Scheduled Messages
+  enabled: false
+  column: feature_flags_ext_1
