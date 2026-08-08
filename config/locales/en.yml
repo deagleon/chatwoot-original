@@ -134,6 +134,7 @@ en:
     messages:
       search:
         time_range_limit_exceeded: 'Search is limited to the last %{days} days'
+      must_be_in_the_future: must be in the future
     categories:
       locale:
         unique: should be unique in the category and portal
