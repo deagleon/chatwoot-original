@@ -26,13 +26,6 @@
 #  index_scheduled_messages_on_message_id               (message_id)
 #  index_scheduled_messages_on_status_and_scheduled_at  (status,scheduled_at)
 #
-# Foreign Keys
-#
-#  fk_rails_...  (account_id => accounts.id)
-#  fk_rails_...  (conversation_id => conversations.id)
-#  fk_rails_...  (created_by_id => users.id)
-#  fk_rails_...  (message_id => messages.id)
-#
 class ScheduledMessage < ApplicationRecord
   class NotPendingError < StandardError; end
 

@@ -141,4 +141,34 @@ RSpec.describe ScheduledMessage do
       expect(described_class.find_by(id: recent_failed.id)).to be_present
     end
   end
+
+  describe 'deleção de entidades relacionadas' do
+    it 'exclui o usuário criador com mensagens agendadas pendentes e enviadas' do
+      build_message.tap(&:save!)
+      sent = build_message(content: 'enviada').tap(&:save!)
+      sent.update!(status: :sent, sent_at: Time.current)
+
+      expect { agent.destroy! }.not_to raise_error
+    end
+
+    it 'exclui a conversa com mensagem agendada enviada e preserva a row com conversation_id nulo' do
+      sent = build_message.tap(&:save!)
+      message = Messages::MessageBuilder.new(agent, conversation, { content: 'Bom dia!', message_type: 'outgoing' }).perform
+      sent.update!(message: message, status: :sent, sent_at: Time.current)
+
+      expect do
+        perform_enqueued_jobs(only: ActiveRecord::DestroyAssociationAsyncJob) { conversation.destroy! }
+      end.not_to raise_error
+      expect(sent.reload.conversation).to be_nil
+      expect(Message.find_by(id: message.id)).to be_nil
+    end
+
+    it 'exclui a conta com mensagens agendadas' do
+      build_message.tap(&:save!)
+      sent = build_message(content: 'enviada').tap(&:save!)
+      sent.update!(status: :sent, sent_at: Time.current)
+
+      expect { account.destroy! }.not_to raise_error
+    end
+  end
 end
