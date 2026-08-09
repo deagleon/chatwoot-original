@@ -17,6 +17,9 @@ import CopilotEditorSection from './CopilotEditorSection.vue';
 import MessageSignatureMissingAlert from './MessageSignatureMissingAlert.vue';
 import ReplyBoxBanner from './ReplyBoxBanner.vue';
 import QuotedEmailPreview from './QuotedEmailPreview.vue';
+import ScheduledMessageCard from './scheduled_messages/ScheduledMessageCard.vue';
+import ScheduledMessageModal from './scheduled_messages/ScheduledMessageModal.vue';
+import NextButton from 'dashboard/components-next/button/Button.vue';
 import { REPLY_EDITOR_MODES } from 'dashboard/components/widgets/WootWriter/constants';
 import WootMessageEditor from 'dashboard/components/widgets/WootWriter/Editor.vue';
 import AudioRecorder from 'dashboard/components/widgets/WootWriter/AudioRecorder.vue';
@@ -58,6 +61,7 @@ import { isFileTypeAllowedForChannel } from 'shared/helpers/FileHelper';
 import { LOCAL_STORAGE_KEYS } from 'dashboard/constants/localStorage';
 import { LocalStorage } from 'shared/helpers/localStorage';
 import { emitter } from 'shared/helpers/mitt';
+import { FEATURE_FLAGS } from 'dashboard/featureFlags';
 const EmojiIconPicker = defineAsyncComponent(
   () =>
     import('dashboard/components-next/emoji-icon-picker/EmojiIconPicker.vue')
@@ -68,6 +72,7 @@ export default {
     ArticleSearchPopover,
     AttachmentPreview,
     AudioRecorder,
+    NextButton,
     ReplyBoxBanner,
     EmojiIconPicker,
     MessageSignatureMissingAlert,
@@ -81,6 +86,8 @@ export default {
     QuotedEmailPreview,
     CopilotEditorSection,
     CopilotReplyBottomPanel,
+    ScheduledMessageCard,
+    ScheduledMessageModal,
   },
   mixins: [inboxMixin, fileUploadMixin, keyboardEventListenerMixins],
   emits: ['toggleEditorSize'],
@@ -129,6 +136,8 @@ export default {
       doAutoSaveDraft: () => {},
       showWhatsAppTemplatesModal: false,
       showContentTemplatesModal: false,
+      showScheduledMessageModal: false,
+      scheduledMessageEditing: null,
       updateEditorSelectionWith: '',
       undefinedVariableMessage: '',
       showMentions: false,
@@ -149,7 +158,14 @@ export default {
       lastEmail: 'getLastEmailInSelectedChat',
       globalConfig: 'globalConfig/get',
       isMetaMessageSendingDisabled: 'globalConfig/isMetaMessageSendingDisabled',
+      isFeatureEnabledonAccount: 'accounts/isFeatureEnabledonAccount',
     }),
+    isScheduledMessagesEnabled() {
+      return this.isFeatureEnabledonAccount(
+        this.$store.getters.getCurrentAccountId,
+        FEATURE_FLAGS.SCHEDULED_MESSAGES
+      );
+    },
     currentContact() {
       const senderId = this.currentChat?.meta?.sender?.id;
       if (!senderId) return {};
@@ -1304,12 +1320,38 @@ export default {
       this.message = acceptedMessage;
       this.setCopilotAcceptedMessage(acceptedMessage);
     },
+    openScheduledMessageModal() {
+      if (this.hasAttachments) {
+        useAlert(this.$t('SCHEDULED_MESSAGES.ATTACHMENTS_UNSUPPORTED'));
+        return;
+      }
+      this.scheduledMessageEditing = null;
+      this.showScheduledMessageModal = true;
+    },
+    onEditScheduledMessage(scheduledMessage) {
+      this.scheduledMessageEditing = scheduledMessage;
+      this.showScheduledMessageModal = true;
+    },
+    closeScheduledMessageModal() {
+      this.showScheduledMessageModal = false;
+      this.scheduledMessageEditing = null;
+    },
+    onScheduledMessageSaved() {
+      this.showScheduledMessageModal = false;
+      this.scheduledMessageEditing = null;
+    },
   },
 };
 </script>
 
 <template>
   <ReplyBoxBanner :message="message" :is-on-private-note="isOnPrivateNote" />
+  <ScheduledMessageCard
+    v-if="isScheduledMessagesEnabled && !showScheduledMessageModal"
+    :conversation-id="conversationId"
+    class="mx-2 mb-2"
+    @edit="onEditScheduledMessage"
+  />
   <div ref="replyEditor" class="reply-box" :class="replyBoxClass">
     <ReplyTopPanel
       :mode="replyType"
@@ -1329,6 +1371,19 @@ export default {
       @toggle-copilot="copilot.toggleEditor"
       @execute-copilot-action="executeCopilotAction"
     />
+    <div
+      v-if="isScheduledMessagesEnabled && !isMessageEmpty && !isOnPrivateNote"
+      class="flex justify-end ltr:pr-2 rtl:pl-2"
+    >
+      <NextButton
+        ghost
+        slate
+        size="xs"
+        data-testid="scheduled-open-modal"
+        :label="$t('SCHEDULED_MESSAGES.BUTTON')"
+        @click="openScheduledMessageModal"
+      />
+    </div>
     <ArticleSearchPopover
       v-if="showArticleSearchPopover && connectedPortalSlug"
       :selected-portal-slug="connectedPortalSlug"
@@ -1516,6 +1571,17 @@ export default {
       @close="hideContentTemplatesModal"
       @on-send="onSendContentTemplateReply"
       @cancel="hideContentTemplatesModal"
+    />
+
+    <ScheduledMessageModal
+      :show="showScheduledMessageModal"
+      :conversation-id="conversationId"
+      :initial-content="
+        scheduledMessageEditing ? scheduledMessageEditing.content : message
+      "
+      :editing="scheduledMessageEditing"
+      @close="closeScheduledMessageModal"
+      @saved="onScheduledMessageSaved"
     />
 
     <woot-confirm-modal

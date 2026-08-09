@@ -61,6 +61,9 @@ class ActionCableConnector extends BaseActionCableConnector {
       'account.cache_invalidated': this.onCacheInvalidate,
       'account.enrichment_completed': this.onEnrichmentCompleted,
       'copilot.message.created': this.onCopilotMessageCreated,
+      'scheduled_message.created': this.onScheduledMessageCreated,
+      'scheduled_message.updated': this.onScheduledMessageUpdated,
+      'scheduled_message.cancelled': this.onScheduledMessageCancelled,
       'voice_call.incoming': this.onVoiceCallIncoming,
       'voice_call.accepted': this.onVoiceCallAccepted,
       'voice_call.outbound_connected': this.onVoiceCallOutboundConnected,
@@ -337,6 +340,21 @@ class ActionCableConnector extends BaseActionCableConnector {
 
   onCopilotMessageCreated = data => {
     this.app.$store.dispatch('copilotMessages/upsert', data);
+  };
+
+  // eslint-disable-next-line class-methods-use-this
+  onScheduledMessageCreated = data => {
+    emitter.emit(BUS_EVENTS.SCHEDULED_MESSAGE_CREATED, data);
+  };
+
+  // eslint-disable-next-line class-methods-use-this
+  onScheduledMessageUpdated = data => {
+    emitter.emit(BUS_EVENTS.SCHEDULED_MESSAGE_UPDATED, data);
+  };
+
+  // eslint-disable-next-line class-methods-use-this
+  onScheduledMessageCancelled = data => {
+    emitter.emit(BUS_EVENTS.SCHEDULED_MESSAGE_CANCELLED, data);
   };
 
   onEnrichmentCompleted = () => {

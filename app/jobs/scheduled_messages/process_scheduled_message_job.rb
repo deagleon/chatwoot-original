@@ -1,4 +1,6 @@
 class ScheduledMessages::ProcessScheduledMessageJob < ApplicationJob
+  include Events::Types
+
   queue_as :high
 
   # At-most-once: o claim é atômico; executing só existe dentro da transação que
@@ -51,6 +53,9 @@ class ScheduledMessages::ProcessScheduledMessageJob < ApplicationJob
       # Liga message_id e commita terminal na mesma transação.
       scheduled_message.update!(message: message, status: :sent, sent_at: Time.current)
     end
+
+    # Pós-commit: o realtime só é emitido com o sent já persistido.
+    Rails.configuration.dispatcher.dispatch(SCHEDULED_MESSAGE_UPDATED, Time.zone.now, scheduled_message: scheduled_message)
   end
 
   # Falha ANTES do commit da Message (validação/flooding do MessageBuilder, rollback
@@ -70,5 +75,8 @@ class ScheduledMessages::ProcessScheduledMessageJob < ApplicationJob
         scheduled_message.update!(status: :failed, retry_count: new_retry_count, error: error.message)
       end
     end
+
+    # Pós-commit: reflete no realtime o retorno a pending ou a falha terminal.
+    Rails.configuration.dispatcher.dispatch(SCHEDULED_MESSAGE_UPDATED, Time.zone.now, scheduled_message: scheduled_message)
   end
 end

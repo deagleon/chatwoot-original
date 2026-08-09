@@ -527,5 +527,37 @@
   },
   "GALLERY_VIEW": {
     "ERROR_DOWNLOADING": "Unable to download attachment. Please try again"
+  },
+  "SCHEDULED_MESSAGES": {
+    "BUTTON": "Agendar",
+    "MODAL_TITLE": "Agendar mensagem",
+    "EDIT_TITLE": "Editar mensagem agendada",
+    "MESSAGE_LABEL": "Mensagem",
+    "DATETIME_LABEL": "Data e hora",
+    "INTERNAL_NOTE_LABEL": "Observação interna (opcional)",
+    "FUTURE_REQUIRED": "A data precisa ser no futuro",
+    "ATTACHMENTS_UNSUPPORTED": "Anexos não são suportados em mensagens agendadas",
+    "SAVING": "Salvando…",
+    "SAVE": "Agendar",
+    "EDIT_SAVE": "Salvar alterações",
+    "CLOSE": "Fechar",
+    "SUCCESS": "Mensagem agendada para {date}",
+    "EDIT_SUCCESS": "Mensagem agendada atualizada",
+    "CANCEL_SUCCESS": "Mensagem agendada cancelada",
+    "ERROR": "Não foi possível concluir a operação. Tente novamente.",
+    "CONFLICT": "A mensagem está {status} e não pode mais ser alterada",
+    "DATETIME_PREVIEW": "Será enviada em {date}",
+    "CARD_TITLE": "Próxima mensagem agendada",
+    "CARD_EDIT": "Editar",
+    "CARD_CANCEL": "Cancelar",
+    "CANCEL_CONFIRM": "Tem certeza? Ela não será enviada.",
+    "CONFIRM_CANCEL": "Sim, cancelar",
+    "DISMISS_CANCEL": "Não",
+    "TIMELINE_ITEM": "{name} agendou uma mensagem para {date}",
+    "STATUS_SENT": "Enviada",
+    "STATUS_FAILED": "Falhou",
+    "STATUS_CANCELLED": "Cancelada",
+    "STATUS_PENDING": "Pendente",
+    "RETRY": "Tentar novamente"
   }
 }
