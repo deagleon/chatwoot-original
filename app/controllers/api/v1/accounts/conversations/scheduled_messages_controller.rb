@@ -8,6 +8,7 @@ class Api::V1::Accounts::Conversations::ScheduledMessagesController < Api::V1::A
   def index
     # Estados transitórios (processing/executing) não são exibidos na listagem.
     @scheduled_messages = @conversation.scheduled_messages
+                                       .includes(:account, :created_by)
                                        .where(status: [ScheduledMessage.statuses[:pending], ScheduledMessage.statuses[:sent],
                                                        ScheduledMessage.statuses[:failed], ScheduledMessage.statuses[:cancelled]])
                                        .order(scheduled_at: :desc)
