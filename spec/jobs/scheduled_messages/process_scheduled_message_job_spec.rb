@@ -99,4 +99,36 @@ RSpec.describe ScheduledMessages::ProcessScheduledMessageJob do
       expect(scheduled.reload).to be_processing
     end
   end
+
+  describe 'corrida de dois workers' do
+    it 'apenas um cria a Message (claim atômico com lock de linha)' do
+      scheduled = create_due
+
+      threads = Array.new(2) do
+        Thread.new do
+          ActiveRecord::Base.connection_pool.with_connection do
+            described_class.perform_now(scheduled.id)
+          end
+        end
+      end
+      threads.each(&:join)
+
+      # content_attributes é json + store (double-encoded no banco), então a
+      # verificação usa o accessor do modelo em vez de extração SQL ->>.
+      messages = Message.where(conversation_id: conversation.id)
+      expect(messages.count).to eq(1)
+      expect(messages.first.content_attributes['scheduled_message_id']).to eq(scheduled.id)
+      expect(scheduled.reload).to be_sent
+    end
+  end
+
+  describe 'entrega at-most-once do canal' do
+    it 'enfileira SendReplyJob exatamente uma vez (callback real de Message#after_create_commit)' do
+      scheduled = create_due
+      described_class.perform_now(scheduled.id)
+
+      send_reply_jobs = ActiveJob::Base.queue_adapter.enqueued_jobs.select { |job| job[:job] == SendReplyJob }
+      expect(send_reply_jobs.length).to eq(1)
+    end
+  end
 end

@@ -105,6 +105,18 @@ RSpec.describe 'Api::V1::Accounts::Conversations::ScheduledMessagesController', 
             params: scheduled_params(scheduled_at: 1.minute.ago.iso8601), headers: agent.create_new_auth_token, as: :json
       expect(response).to have_http_status(:unprocessable_entity)
     end
+
+    it 'corrida editar × sweep: o perdedor do lock recebe 409' do
+      scheduled = create_scheduled
+      # O sweep vence o lock primeiro e leva a row a processing antes do PATCH:
+      scheduled.with_lock { scheduled.update!(status: :processing) }
+
+      patch "/api/v1/accounts/#{account.id}/conversations/#{conversation.display_id}/scheduled_messages/#{scheduled.id}",
+            params: scheduled_params(content: 'novo'), headers: agent.create_new_auth_token, as: :json
+
+      expect(response).to have_http_status(:conflict)
+      expect(response.parsed_body['status']).to eq('processing')
+    end
   end
 
   describe 'DELETE cancel' do
