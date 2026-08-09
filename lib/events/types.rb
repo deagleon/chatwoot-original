@@ -64,4 +64,9 @@ module Events::Types
 
   # copilot events
   COPILOT_MESSAGE_CREATED = 'copilot.message.created'
+
+  # scheduled message events
+  SCHEDULED_MESSAGE_CREATED = 'scheduled_message.created'
+  SCHEDULED_MESSAGE_UPDATED = 'scheduled_message.updated'
+  SCHEDULED_MESSAGE_CANCELLED = 'scheduled_message.cancelled'
 end
