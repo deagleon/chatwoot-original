@@ -1,4 +1,6 @@
 class Api::V1::Accounts::Conversations::ScheduledMessagesController < Api::V1::Accounts::Conversations::BaseController
+  include Events::Types
+
   before_action :ensure_feature_enabled
   before_action :set_scheduled_message, only: [:update, :destroy, :retry]
 
@@ -18,6 +20,7 @@ class Api::V1::Accounts::Conversations::ScheduledMessagesController < Api::V1::A
     @scheduled_message = @conversation.scheduled_messages.create!(
       scheduled_message_params.merge(account: Current.account, created_by: Current.user)
     )
+    Rails.configuration.dispatcher.dispatch(SCHEDULED_MESSAGE_CREATED, Time.zone.now, scheduled_message: @scheduled_message)
   end
 
   # Editar apenas enquanto pending; a corrida com o sweep é decidida pelo with_lock
@@ -27,6 +30,7 @@ class Api::V1::Accounts::Conversations::ScheduledMessagesController < Api::V1::A
       next render_conflict unless @scheduled_message.pending?
 
       @scheduled_message.update!(scheduled_message_params)
+      Rails.configuration.dispatcher.dispatch(SCHEDULED_MESSAGE_UPDATED, Time.zone.now, scheduled_message: @scheduled_message)
     end
   end
 
@@ -35,6 +39,7 @@ class Api::V1::Accounts::Conversations::ScheduledMessagesController < Api::V1::A
       next render_conflict unless @scheduled_message.pending?
 
       @scheduled_message.update!(status: :cancelled)
+      Rails.configuration.dispatcher.dispatch(SCHEDULED_MESSAGE_CANCELLED, Time.zone.now, scheduled_message: @scheduled_message)
     end
   end
 
@@ -45,6 +50,7 @@ class Api::V1::Accounts::Conversations::ScheduledMessagesController < Api::V1::A
       next render_conflict unless @scheduled_message.failed?
 
       @scheduled_message.retry_manual!
+      Rails.configuration.dispatcher.dispatch(SCHEDULED_MESSAGE_UPDATED, Time.zone.now, scheduled_message: @scheduled_message)
       ScheduledMessages::ProcessScheduledMessageJob.perform_later(@scheduled_message.id)
     end
   end

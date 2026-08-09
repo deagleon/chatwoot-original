@@ -78,6 +78,78 @@ describe ActionCableListener do
     end
   end
 
+  describe '#scheduled_message_created' do
+    let!(:scheduled_message) { create(:scheduled_message, account: account, conversation: conversation, created_by: agent) }
+    let!(:event) { Events::Base.new(:'scheduled_message.created', Time.zone.now, scheduled_message: scheduled_message) }
+
+    it 'sends the scheduled message to account admins and inbox agents' do
+      # HACK: to reload conversation inbox members
+      expect(conversation.inbox.reload.inbox_members.count).to eq(1)
+
+      expect(ActionCableBroadcastJob).to receive(:perform_later).with(
+        a_collection_containing_exactly(agent.pubsub_token, admin.pubsub_token),
+        'scheduled_message.created',
+        scheduled_message.push_event_data.merge(account_id: account.id)
+      )
+      listener.scheduled_message_created(event)
+    end
+
+    it 'does not broadcast when the conversation is gone' do
+      scheduled_message.update!(conversation: nil)
+
+      expect(ActionCableBroadcastJob).not_to receive(:perform_later)
+      listener.scheduled_message_created(event)
+    end
+  end
+
+  describe '#scheduled_message_updated' do
+    let!(:scheduled_message) { create(:scheduled_message, account: account, conversation: conversation, created_by: agent) }
+    let!(:event) { Events::Base.new(:'scheduled_message.updated', Time.zone.now, scheduled_message: scheduled_message) }
+
+    it 'sends the scheduled message to account admins and inbox agents' do
+      # HACK: to reload conversation inbox members
+      expect(conversation.inbox.reload.inbox_members.count).to eq(1)
+
+      expect(ActionCableBroadcastJob).to receive(:perform_later).with(
+        a_collection_containing_exactly(agent.pubsub_token, admin.pubsub_token),
+        'scheduled_message.updated',
+        scheduled_message.push_event_data.merge(account_id: account.id)
+      )
+      listener.scheduled_message_updated(event)
+    end
+
+    it 'does not broadcast when the conversation is gone' do
+      scheduled_message.update!(conversation: nil)
+
+      expect(ActionCableBroadcastJob).not_to receive(:perform_later)
+      listener.scheduled_message_updated(event)
+    end
+  end
+
+  describe '#scheduled_message_cancelled' do
+    let!(:scheduled_message) { create(:scheduled_message, account: account, conversation: conversation, created_by: agent) }
+    let!(:event) { Events::Base.new(:'scheduled_message.cancelled', Time.zone.now, scheduled_message: scheduled_message) }
+
+    it 'sends the scheduled message to account admins and inbox agents' do
+      # HACK: to reload conversation inbox members
+      expect(conversation.inbox.reload.inbox_members.count).to eq(1)
+
+      expect(ActionCableBroadcastJob).to receive(:perform_later).with(
+        a_collection_containing_exactly(agent.pubsub_token, admin.pubsub_token),
+        'scheduled_message.cancelled',
+        scheduled_message.push_event_data.merge(account_id: account.id)
+      )
+      listener.scheduled_message_cancelled(event)
+    end
+
+    it 'does not broadcast when the conversation is gone' do
+      scheduled_message.update!(conversation: nil)
+
+      expect(ActionCableBroadcastJob).not_to receive(:perform_later)
+      listener.scheduled_message_cancelled(event)
+    end
+  end
+
   describe '#typing_on' do
     let(:event_name) { :'conversation.typing_on' }
     let!(:event) { Events::Base.new(event_name, Time.zone.now, conversation: conversation, user: agent, is_private: false) }

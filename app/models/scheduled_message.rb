@@ -66,6 +66,22 @@ class ScheduledMessage < ApplicationRecord
     expired_terminal.in_batches(of: 1000).delete_all
   end
 
+  # Espelha app/views/api/v1/models/_scheduled_message.json.jbuilder para o realtime.
+  def push_event_data
+    timezone = account.reporting_timezone.presence || 'UTC'
+    {
+      id: id,
+      content: content,
+      scheduled_at: scheduled_at.in_time_zone(timezone).iso8601,
+      status: status,
+      internal_note: internal_note,
+      message_id: message_id,
+      sent_at: sent_at&.in_time_zone(timezone)&.iso8601,
+      error: error,
+      created_by: created_by&.push_event_data
+    }
+  end
+
   # Atomic claim: only one worker can move a row into processing, so a row re-enqueued by an
   # overlapping sweep (or after a stale reclaim) cannot double-execute. A stale processing row
   # is reclaimed directly (no pending window), and refreshing updated_at renews the lock,
