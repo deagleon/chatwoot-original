@@ -41,7 +41,10 @@ test.describe('Pipelines Board - E2E', () => {
     await assertPipelineFeatureEnabled(page, accountId);
   });
 
-  test('pipelines list page renders the table', async () => {
+  test('pipelines list page renders the table', async ({ page }) => {
+    // Garante um pipeline existente: com a conta vazia a listagem mostra o
+    // empty state em vez da tabela.
+    await ensurePipeline(page, accountId, TEST_PIPELINE_NAME);
     await pipelineBoard.navigateToList(accountId);
     await expect(pipelineBoard.getPipelinesTable()).toBeVisible();
   });
@@ -49,9 +52,10 @@ test.describe('Pipelines Board - E2E', () => {
   test('creates a pipeline "Vendas" via the modal and shows it in the table', async ({
     page,
   }) => {
-    await pipelineBoard.navigateToList(accountId);
-
+    // Limpa via API ANTES de navegar: a página carregada não refaz o fetch após
+    // um delete externo, então a row arquivada ficaria visível (stale).
     await cleanPipelineByName(page, accountId, TEST_PIPELINE_NAME);
+    await pipelineBoard.navigateToList(accountId);
     await expect(pipelineBoard.getPipelineRow(TEST_PIPELINE_NAME)).toHaveCount(0);
 
     await pipelineBoard.createPipelineViaModal(TEST_PIPELINE_NAME);
@@ -88,7 +92,7 @@ test.describe('Pipelines Board - E2E', () => {
     expect(pendente).toBeDefined();
     expect(followUp).toBeDefined();
 
-    const conversationId = await createConversationInStage(
+    const { conversationId, contactName } = await createConversationInStage(
       page,
       accountId,
       pendente.id
@@ -96,12 +100,11 @@ test.describe('Pipelines Board - E2E', () => {
 
     await pipelineBoard.navigateToBoard(accountId, id);
 
-    const card = pipelineBoard.getCard('Pendente', /.+/);
+    // O nome do contato é único por execução (PipelineE2E <timestamp>), então o
+    // locator pelo nome exato não conflita com cards residuais de execuções
+    // anteriores nem com o botão "Load more" da coluna.
+    const card = pipelineBoard.getCard('Pendente', contactName);
     await expect(card).toBeVisible();
-
-    const contactName =
-      (await card.getAttribute('aria-label'))?.split(',')[0] ?? '';
-    expect(contactName.length).toBeGreaterThan(0);
 
     await pipelineBoard.dragCardToStage({
       fromStage: 'Pendente',
@@ -174,9 +177,9 @@ async function findPipelineByName(
     async ({ id, pipelineName }) => {
       const api = (window as typeof window & { axios: DashboardApi }).axios;
       const res = (await api.get(`/api/v1/accounts/${id}/pipelines`)) as {
-        data: PipelinePayload[];
+        data: { payload: PipelinePayload[] };
       };
-      const match = res.data.find(p => p.name === pipelineName);
+      const match = res.data.payload.find(p => p.name === pipelineName);
       return match?.id ?? null;
     },
     { id: accountId, pipelineName: name }
@@ -211,16 +214,20 @@ async function ensurePipeline(
   const existing = await findPipelineByName(page, accountId, name);
   if (existing !== null) return existing;
 
-  return page.evaluate(
+  // POST /pipelines responde 204 sem body; o id vem da listagem seguinte.
+  await page.evaluate(
     async ({ id, pipelineName }) => {
       const api = (window as typeof window & { axios: DashboardApi }).axios;
-      const res = (await api.post(`/api/v1/accounts/${id}/pipelines`, {
+      await api.post(`/api/v1/accounts/${id}/pipelines`, {
         pipeline: { name: pipelineName },
-      })) as { data: PipelinePayload };
-      return res.data.id;
+      });
     },
     { id: accountId, pipelineName: name }
   );
+
+  const created = await findPipelineByName(page, accountId, name);
+  if (created === null) throw new Error(`pipeline "${name}" not created`);
+  return created;
 }
 
 async function fetchStages(
@@ -244,7 +251,7 @@ async function createConversationInStage(
   page: Page,
   accountId: number,
   pipelineStageId: number
-): Promise<number> {
+): Promise<{ conversationId: number; contactName: string }> {
   return page.evaluate(
     async ({ id, pipelineStageId: stageId }) => {
       const api = (window as typeof window & { axios: DashboardApi }).axios;
@@ -254,16 +261,17 @@ async function createConversationInStage(
       const inbox = inboxesRes.data.payload?.[0];
       if (!inbox) throw new Error('No inbox available in the test account');
 
+      const contactName = `PipelineE2E ${Date.now()}`;
       const contactRes = (await api.post(
         `/api/v1/accounts/${id}/contacts`,
-        { name: `PipelineE2E ${Date.now()}` }
-      )) as { data: { id: number } };
+        { name: contactName }
+      )) as { data: { payload: { contact: { id: number } } } };
 
       const convRes = (await api.post(
         `/api/v1/accounts/${id}/conversations`,
         {
           inbox_id: inbox.id,
-          contact_id: contactRes.data.id,
+          contact_id: contactRes.data.payload.contact.id,
         }
       )) as { data: { id: number } };
 
@@ -272,7 +280,7 @@ async function createConversationInStage(
         { pipeline_stage_id: stageId }
       );
 
-      return convRes.data.id;
+      return { conversationId: convRes.data.id, contactName };
     },
     { id: accountId, pipelineStageId }
   );
