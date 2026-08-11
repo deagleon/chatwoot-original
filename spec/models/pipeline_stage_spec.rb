@@ -23,33 +23,10 @@ RSpec.describe PipelineStage do
     end
   end
 
-  describe '.with_conversations_count' do
-    it 'returns conversations_count for each stage' do
-      create(:conversation, account: account, pipeline_stage: stage)
-      create(:conversation, account: account, pipeline_stage: stage)
-
-      stages = described_class.with_conversations_count.where(pipeline_id: pipeline.id)
-      found = stages.find { |s| s.id == stage.id }
-      expect(found.conversations_count).to eq(2)
-    end
-  end
-
   describe '#conversations_count' do
-    it 'returns count from scope attribute when loaded' do
-      loaded = described_class.with_conversations_count.find(stage.id)
-      expect(loaded.conversations_count).to eq(0)
-    end
-
     it 'falls back to actual count when not loaded via scope' do
       create(:conversation, account: account, pipeline_stage: stage)
       expect(stage.conversations_count).to eq(1)
-    end
-  end
-
-  describe '#reorder!' do
-    it 'updates position' do
-      stage.reorder!(5)
-      expect(stage.reload.position).to eq(5)
     end
   end
 

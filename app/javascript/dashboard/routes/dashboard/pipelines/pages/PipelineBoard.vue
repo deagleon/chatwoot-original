@@ -94,8 +94,10 @@ const fetchStageConversations = async (stageId, page = 1) => {
       stageId,
       params
     );
-    const payload = response.data?.payload ?? [];
-    const meta = response.data?.meta ?? {};
+    // O endpoint envolve em json.data { meta, payload } — a leitura é
+    // response.data.data, não response.data.
+    const payload = response.data?.data?.payload ?? [];
+    const meta = response.data?.data?.meta ?? {};
     if (page === 1) {
       conversationsByStage[stageId] = payload;
     } else {
@@ -105,7 +107,8 @@ const fetchStageConversations = async (stageId, page = 1) => {
       ];
     }
     hasMoreByStage[stageId] =
-      payload.length > 0 && page < (meta.all_count ?? 0);
+      payload.length > 0 &&
+      conversationsByStage[stageId].length < (meta.all_count ?? 0);
     pageByStage[stageId] = page;
   } catch {
     // silently ignore — individual column errors don't block the board

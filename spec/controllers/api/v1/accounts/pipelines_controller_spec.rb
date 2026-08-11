@@ -27,9 +27,9 @@ RSpec.describe 'Pipeline API', type: :request do
     context 'when feature flag disabled' do
       before { account.disable_features!('pipeline') }
 
-      it 'returns unauthorized' do
+      it 'returns not found' do
         get "/api/v1/accounts/#{account.id}/pipelines", headers: admin.create_new_auth_token, as: :json
-        expect(response).to have_http_status(:unauthorized)
+        expect(response).to have_http_status(:not_found)
       end
     end
   end
@@ -172,7 +172,27 @@ RSpec.describe 'Pipeline API', type: :request do
       expect(response).to have_http_status(:not_found)
     end
 
-    context 'real-time dispatch' do
+    it 'allows an agent with inbox access to move (update? OSS = show?)' do
+      create(:inbox_member, user: agent, inbox: conversation.inbox)
+
+      post "/api/v1/accounts/#{account.id}/conversations/#{conversation.display_id}/pipeline_stage",
+           headers: agent.create_new_auth_token,
+           params: { pipeline_stage_id: target_stage.id }, as: :json
+
+      expect(response).to have_http_status(:success)
+      expect(conversation.reload.pipeline_stage_id).to eq(target_stage.id)
+    end
+
+    it 'denies an agent without inbox/team access' do
+      post "/api/v1/accounts/#{account.id}/conversations/#{conversation.display_id}/pipeline_stage",
+           headers: agent.create_new_auth_token,
+           params: { pipeline_stage_id: target_stage.id }, as: :json
+
+      expect(response).to have_http_status(:unauthorized)
+      expect(conversation.reload.pipeline_stage_id).to be_nil
+    end
+
+    context 'when dispatching real-time' do
       it 'emits CONVERSATION_UPDATED with pipeline_stage_id in changed_attributes' do
         allow(Rails.configuration.dispatcher).to receive(:dispatch)
 

@@ -100,15 +100,6 @@ class ScheduledMessage < ApplicationRecord
     processing? && updated_at < STALE_PROCESSING_TIMEOUT.ago
   end
 
-  # User cancellation — only while pending (D8); a race with the sweep is decided by the lock.
-  def cancel!
-    with_lock do
-      raise NotPendingError, "cannot cancel #{status} message" unless pending?
-
-      update!(status: :cancelled)
-    end
-  end
-
   # Manual retry of a failed row: back to pending, reset retries and clear the error.
   # The worker is enqueued by the caller.
   def retry_manual!

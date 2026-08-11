@@ -28,7 +28,6 @@ class Pipeline < ApplicationRecord
   validates :name, presence: true
 
   scope :active, -> { where(archived_at: nil) }
-  scope :archived, -> { where.not(archived_at: nil) }
 
   after_create :create_default_stages!
 

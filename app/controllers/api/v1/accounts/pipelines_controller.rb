@@ -25,7 +25,7 @@ class Api::V1::Accounts::PipelinesController < Api::V1::Accounts::BaseController
   private
 
   def ensure_pipeline_feature_enabled
-    raise Pundit::NotAuthorizedError unless Current.account.feature_enabled?('pipeline')
+    render json: { error: 'Feature not enabled' }, status: :not_found unless Current.account.feature_enabled?('pipeline')
   end
 
   def fetch_pipeline

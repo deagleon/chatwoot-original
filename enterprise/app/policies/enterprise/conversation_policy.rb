@@ -10,6 +10,24 @@ module Enterprise::ConversationPolicy
     permits_participating?(permissions)
   end
 
+  # Ações de escrita de conversa (ex.: mover de etapa — authorize :update?)
+  # seguem o modelo de custom roles do show?, com uma exceção: o caminho
+  # participating (atribuição/participação) é a própria autorização e dispensa o
+  # inbox access — sem isso, o agente atribuído não moveria (caso OND-134).
+  # Permissões amplas (manage_all/unassigned_manage) NÃO são atreladas a uma
+  # relação com a conversa e continuam exigindo o acesso-base do OSS
+  # (inbox/team/admin/bot) — o escopo por inbox não pode ser furado: um agente
+  # com conversation_manage de um inbox não move conversas de outro inbox.
+  def update?
+    return super unless custom_role_permissions?
+
+    permissions = custom_role_permissions
+    return true if permits_participating?(permissions)
+    return false unless super
+
+    manage_all_conversations?(permissions) || permits_unassigned_manage?(permissions)
+  end
+
   private
 
   def manage_all_conversations?(permissions)

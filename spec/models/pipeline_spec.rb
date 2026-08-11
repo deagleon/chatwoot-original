@@ -22,11 +22,6 @@ RSpec.describe Pipeline do
       expect(described_class.active).to include(active_pipeline)
       expect(described_class.active).not_to include(archived_pipeline)
     end
-
-    it 'returns archived pipelines' do
-      expect(described_class.archived).to include(archived_pipeline)
-      expect(described_class.archived).not_to include(active_pipeline)
-    end
   end
 
   describe 'default stages creation' do

@@ -1,30 +1,10 @@
 import { Page, expect } from '@playwright/test';
 
-type DashboardApi = {
-  get: (url: string) => Promise<{
-    data: {
-      payload: Array<{
-        id: number;
-        pipeline_stage_id: number | null;
-        meta?: { sender?: { name?: string } };
-      }>;
-    };
-  }>;
-  post: (url: string, data?: unknown) => Promise<unknown>;
-  patch: (url: string, data?: unknown) => Promise<unknown>;
-};
-
-type PipelinePayload = {
-  id: number;
-  name: string;
-  stages: Array<{ id: number; name: string; position: number }>;
-};
-
 const DEFAULT_STAGE_NAMES = ['Pendente', 'Follow-up', 'Proposta', 'Finalizado'];
 
 /**
  * Page object for the Pipeline list page (`/app/accounts/:accountId/pipelines`)
- * and the Kanban board (`/app/accounts/:accountId/pipelines/:pipelineId/board`).
+ * and the Kanban board (`/app/accounts/:accountId/pipelines/:pipelineId`).
  *
  * Selectors rely on the existing `role`/`aria-label` attributes already shipped
  * on PipelineBoardColumn (`role="list"`, `aria-label="<stage name>"`) and
@@ -42,7 +22,7 @@ export class PipelineBoard {
 
   async navigateToBoard(accountId: number, pipelineId: number) {
     await this.page.goto(
-      `/app/accounts/${accountId}/pipelines/${pipelineId}/board`
+      `/app/accounts/${accountId}/pipelines/${pipelineId}`
     );
   }
 
@@ -63,7 +43,9 @@ export class PipelineBoard {
   }
 
   getCreatePipelineButton() {
-    return this.page.getByRole('button', { name: /create pipeline/i });
+    // O header e o empty state têm o mesmo botão "New pipeline" — .first()
+    // evita strict mode violation quando a lista está vazia.
+    return this.page.getByRole('button', { name: /new pipeline/i }).first();
   }
 
   async openCreatePipelineModal() {
@@ -143,8 +125,10 @@ export class PipelineBoard {
 
     await card.dispatchEvent('dragstart', { dataTransfer: transfer });
     await target.dispatchEvent('dragover', { dataTransfer: transfer });
-    await target.dispatchEvent('drop', { dataTransfer: transfer });
+    // dragend ANTES do drop: o drop move o card otimisticamente para a coluna
+    // alvo, e o dispatch no card de origem falharia com o elemento removido.
     await card.dispatchEvent('dragend', { dataTransfer: transfer });
+    await target.dispatchEvent('drop', { dataTransfer: transfer });
 
     // Sanity check that the JS-side dispatch carried the payload the
     // PipelineBoardColumn handler expects (conversation id as text/plain).
@@ -152,33 +136,5 @@ export class PipelineBoard {
       (dt: DataTransfer) => dt.getData('text/plain')
     );
     expect(carriedId).toBe(String(conversationId));
-  }
-
-  // ---------- API helpers (via window.axios) ----------
-
-  async fetchPipelines(accountId: number): Promise<PipelinePayload[]> {
-    return this.page.evaluate(async (id: number) => {
-      const api = (window as typeof window & { axios: DashboardApi }).axios;
-      const res = await api.get(`/api/v1/accounts/${id}/pipelines`);
-      return (res as { data: PipelinePayload[] }).data;
-    }, accountId);
-  }
-
-  async createPipelineViaApi(accountId: number, name: string): Promise<number> {
-    return this.page.evaluate(
-      async ({ id, pipelineName }) => {
-        const api = (window as typeof window & { axios: DashboardApi }).axios;
-        const res = (await api.post(`/api/v1/accounts/${id}/pipelines`, {
-          pipeline: { name: pipelineName },
-        })) as { data: { id: number } };
-        return res.data.id;
-      },
-      { id: accountId, pipelineName: name }
-    );
-  }
-
-  async fetchBoardPipelines(accountId: number): Promise<PipelinePayload[]> {
-    const pipelines = await this.fetchPipelines(accountId);
-    return pipelines;
   }
 }
