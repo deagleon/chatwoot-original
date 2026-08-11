@@ -61,8 +61,13 @@ class Captain::BaseTaskService
 
     route = Llm::FeatureRouter.resolve(feature: feature, account: account)
     return model if model.present? && route[:source] == :default
+    return route[:model] unless route[:source] == :default
 
-    route[:model]
+    installation_model.presence || route[:model]
+  end
+
+  def installation_model
+    InstallationConfig.find_by(name: 'CAPTAIN_OPEN_AI_MODEL')&.value
   end
 
   def execute_ruby_llm_request(model:, messages:, schema: nil, tools: [])
@@ -83,7 +88,7 @@ class Captain::BaseTaskService
   end
 
   def build_chat(context, model:, messages:, schema: nil, tools: [])
-    chat = context.chat(model: model)
+    chat = Llm::Config.chat(context: context, model: model)
     system_msg = messages.find { |m| m[:role] == 'system' }
     chat.with_instructions(system_msg[:content]) if system_msg
     chat.with_schema(schema) if schema
