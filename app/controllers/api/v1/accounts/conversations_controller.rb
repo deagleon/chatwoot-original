@@ -1,10 +1,10 @@
-class Api::V1::Accounts::ConversationsController < Api::V1::Accounts::BaseController
+class Api::V1::Accounts::ConversationsController < Api::V1::Accounts::BaseController # rubocop:disable Metrics/ClassLength
   include Events::Types
   include DateRangeHelper
   include HmacConcern
   include ConversationCustomAttributesConcern
 
-  before_action :conversation, except: [:index, :meta, :search, :create, :filter]
+  before_action :conversation, except: [:index, :meta, :search, :create, :filter, :pipeline_stage]
   before_action :inbox, :contact, :contact_inbox, only: [:create]
 
   ATTACHMENT_RESULTS_PER_PAGE = 100
@@ -104,6 +104,11 @@ class Api::V1::Accounts::ConversationsController < Api::V1::Accounts::BaseContro
   end
 
   def pipeline_stage
+    # O move é autorizado exclusivamente por :update? (OSS: mesmo acesso do show?;
+    # enterprise: modelo de custom roles). Por isso fica fora do before_action
+    # :conversation, que autoriza :show? — o gate de leitura bloquearia o agente
+    # atribuído/participante com conversation_participating_manage sem inbox access.
+    @conversation = Current.account.conversations.find_by!(display_id: params[:id])
     authorize @conversation, :update?
     stage = Current.account.pipeline_stages.find(params[:pipeline_stage_id])
     @conversation.move_to_stage!(stage)

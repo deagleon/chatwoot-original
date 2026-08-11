@@ -11,6 +11,13 @@ class ConversationPolicy < ApplicationPolicy
     administrator? || agent_bot? || agent_can_view_conversation?
   end
 
+  # Ações de escrita de conversa (ex.: mover de etapa — authorize :update?)
+  # seguem o mesmo acesso do show?; o overlay enterprise acrescenta a checagem
+  # de custom roles (conversation_manage / unassigned_manage / participating_manage).
+  def update?
+    administrator? || agent_bot? || agent_can_view_conversation?
+  end
+
   private
 
   def agent_can_view_conversation?

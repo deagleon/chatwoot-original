@@ -123,11 +123,14 @@ describe('PipelineBoard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockPipelinesShow.mockResolvedValue({ data: pipelineData });
+    // Espelha o shape real do endpoint (json.data { meta, payload }).
     mockStageConversations.mockImplementation((_pipelineId, stageId) =>
       Promise.resolve({
         data: {
-          payload: stageConversations[stageId] ?? [],
-          meta: { all_count: stageConversations[stageId]?.length ?? 0 },
+          data: {
+            payload: stageConversations[stageId] ?? [],
+            meta: { all_count: stageConversations[stageId]?.length ?? 0 },
+          },
         },
       })
     );

@@ -10,6 +10,20 @@ module Enterprise::ConversationPolicy
     permits_participating?(permissions)
   end
 
+  # Ações de escrita de conversa (ex.: mover de etapa — authorize :update?)
+  # seguem o mesmo modelo de custom roles do show?; sem custom role, o veredito
+  # é o do policy OSS (super) — a atribuição/participação autoriza o move mesmo
+  # sem inbox access, pois a relação com a conversa é a própria permissão.
+  def update?
+    return super unless custom_role_permissions?
+
+    permissions = custom_role_permissions
+    return true if manage_all_conversations?(permissions)
+    return true if permits_unassigned_manage?(permissions)
+
+    permits_participating?(permissions)
+  end
+
   private
 
   def manage_all_conversations?(permissions)

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, useId } from 'vue';
 import { OnClickOutside } from '@vueuse/components';
 import { useI18n } from 'vue-i18n';
 
@@ -67,6 +67,9 @@ const { t } = useI18n();
 const dialogRef = ref(null);
 const dialogContentRef = ref(null);
 const isOpen = ref(false);
+// Nome acessível do <dialog> nativo: o título vira aria-labelledby (getByRole
+// 'dialog' com name depende disso; e é o comportamento acessível correto).
+const titleId = useId();
 
 const maxWidthClass = computed(() => {
   const classesMap = {
@@ -118,6 +121,7 @@ defineExpose({ open, close });
   <TeleportWithDirection to="body">
     <dialog
       ref="dialogRef"
+      :aria-labelledby="title ? titleId : undefined"
       class="w-full transition-all duration-300 ease-in-out shadow-xl rounded-xl"
       :class="[
         maxWidthClass,
@@ -134,7 +138,10 @@ defineExpose({ open, close });
           @click.stop
         >
           <div v-if="title || description" class="flex flex-col gap-2">
-            <h3 class="text-base font-medium leading-6 text-n-slate-12">
+            <h3
+              :id="titleId"
+              class="text-base font-medium leading-6 text-n-slate-12"
+            >
               {{ title }}
             </h3>
             <slot name="description">

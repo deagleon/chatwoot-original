@@ -312,6 +312,9 @@ RSpec.describe 'Conversations API', type: :request do
 
     context 'when agent is a conversation participant' do
       before do
+        # ConversationParticipant valida inbox access do usuário; sem o inbox
+        # member o setup é inválido (RecordInvalid).
+        create(:inbox_member, user: agent, inbox: conversation.inbox)
         create(:conversation_participant, conversation: conversation, account: account, user: agent)
         custom_role = create(:custom_role, account: account, permissions: ['conversation_participating_manage'])
         account.account_users.find_by(user_id: agent.id).update!(custom_role: custom_role)

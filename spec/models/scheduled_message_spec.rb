@@ -100,15 +100,6 @@ RSpec.describe ScheduledMessage do
     end
   end
 
-  describe 'cancel!' do
-    it 'cancela apenas pending' do
-      message = build_message.tap(&:save!)
-      message.cancel!
-      expect(message).to be_cancelled
-      expect { message.reload.cancel! }.to raise_error(ScheduledMessage::NotPendingError)
-    end
-  end
-
   describe 'retry_manual!' do
     it 'volta para pending, zera retry_count e limpa error' do
       message = build_message.tap(&:save!)

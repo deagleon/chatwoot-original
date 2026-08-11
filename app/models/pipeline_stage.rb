@@ -22,17 +22,7 @@ class PipelineStage < ApplicationRecord
   validates :name, presence: true
   validates :position, presence: true, uniqueness: { scope: :pipeline_id }
 
-  scope :with_conversations_count, lambda {
-    left_joins(:conversations)
-      .select('pipeline_stages.*, COUNT(conversations.id) AS conversations_count')
-      .group('pipeline_stages.id')
-  }
-
   def conversations_count
     self[:conversations_count] || conversations.count
-  end
-
-  def reorder!(new_position)
-    update!(position: new_position)
   end
 end
