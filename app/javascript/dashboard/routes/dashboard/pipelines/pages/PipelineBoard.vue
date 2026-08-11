@@ -375,7 +375,9 @@ watch(
       :show-confirm-button="false"
       @close="selectedConversation = null"
     >
-      <div class="h-[75vh]">
+      <!-- O modal cresce com o conteúdo; só o scroll é limitado (mensagens longas
+           rolam internamente em vez de empurrar o modal para fora da viewport). -->
+      <div class="max-h-[calc(100vh-2rem)] overflow-y-auto">
         <ConversationBox
           :is-contact-panel-open="false"
           :is-on-expanded-layout="false"
