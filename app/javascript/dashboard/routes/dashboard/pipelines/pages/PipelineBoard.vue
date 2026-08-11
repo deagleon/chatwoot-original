@@ -375,10 +375,13 @@ watch(
       :show-confirm-button="false"
       @close="selectedConversation = null"
     >
-      <!-- O modal cresce com o conteúdo; só o scroll é limitado (mensagens longas
-           rolam internamente em vez de empurrar o modal para fora da viewport). -->
-      <div class="max-h-[calc(100vh-2rem)] overflow-y-auto">
+      <!-- Modal com altura que acomoda o conteúdo típico (header + mensagens +
+           composer) e cresce até 80vh para conversas longas. O flex-1 + h-full
+           no ConversationBox permite que o MessagesView (que tem h-full +
+           flex-grow) ocupe o espaço entre header e composer. -->
+      <div class="flex flex-col min-h-[28rem] h-[36rem] max-h-[80vh]">
         <ConversationBox
+          :class="'h-full flex-1 min-h-0 flex flex-col'"
           :is-contact-panel-open="false"
           :is-on-expanded-layout="false"
           :is-inbox-view="true"
