@@ -44,6 +44,8 @@ RSpec.describe Concerns::Agentable do
 
   describe '#agent' do
     it 'creates an Agents::Agent with correct parameters' do
+      account.disable_features!('captain_integration_v2')
+
       expect(Agents::Agent).to receive(:new).with(
         name: 'Test Agent',
         instructions: instance_of(Proc),
@@ -163,6 +165,8 @@ RSpec.describe Concerns::Agentable do
 
   describe '#agent_model' do
     it 'returns the assistant feature default model' do
+      account.disable_features!('captain_integration_v2')
+
       expect(dummy_instance.send(:agent_model)).to eq(Llm::Models.default_model_for('assistant'))
     end
 
@@ -174,6 +178,7 @@ RSpec.describe Concerns::Agentable do
     end
 
     it 'returns the installation model when account override is absent' do
+      account.disable_features!('captain_integration_v2')
       create(:installation_config, name: 'CAPTAIN_OPEN_AI_MODEL', value: 'gpt-4.1-nano')
 
       expect(dummy_instance.send(:agent_model)).to eq('gpt-4.1-nano')

@@ -17,10 +17,10 @@ RSpec.describe Internal::ReconcilePlanConfigService do
         disable_branding_account = create(:account)
         disable_branding_account.enable_features!('disable_branding')
         service.perform
-        expect(account.reload.enabled_features.keys).not_to include(
-          'captain_integration', 'captain_integration_v2', 'disable_branding', 'audit_logs'
-        )
-        expect(account_with_captain.reload.enabled_features.keys).not_to include('captain_integration', 'captain_integration_v2')
+        expect(account.reload.enabled_features.keys).not_to include('disable_branding', 'audit_logs')
+        # Captain features are available on all plans
+        expect(account.reload.enabled_features.keys).to include('captain_integration', 'captain_integration_v2')
+        expect(account_with_captain.reload.enabled_features.keys).to include('captain_integration', 'captain_integration_v2')
         expect(disable_branding_account.reload.enabled_features.keys).not_to include('disable_branding')
       end
 

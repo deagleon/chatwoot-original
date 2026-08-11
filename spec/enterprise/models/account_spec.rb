@@ -273,26 +273,30 @@ RSpec.describe Account, type: :model do
       )
     end
 
-    it 'enables Captain V2 for new self-hosted enterprise accounts' do
+    it 'enables captain features for new self-hosted enterprise accounts' do
       allow(ChatwootApp).to receive(:self_hosted_enterprise?).and_return(true)
 
       account = create(:account)
 
       expect(account).to be_feature_enabled('captain_integration')
       expect(account).to be_feature_enabled('captain_integration_v2')
+      expect(account).to be_feature_enabled('captain_document_auto_sync')
+      expect(account).to be_feature_enabled('custom_tools')
       expect(account.captain_preferences[:models]['assistant']).to eq('gpt-5.2')
       expect(account.captain_models).to be_nil
     end
 
-    it 'marks new cloud accounts as eligible for the Captain V2 paid-plan default' do
+    it 'enables captain features and marks new cloud accounts as eligible for the Captain V2 paid-plan default' do
       allow(ChatwootApp).to receive(:self_hosted_enterprise?).and_return(false)
       allow(ChatwootApp).to receive(:chatwoot_cloud?).and_return(true)
 
       account = create(:account)
 
       expect(account.internal_attributes[Enterprise::Account::CAPTAIN_V2_DEFAULT_ELIGIBLE]).to be true
-      expect(account).not_to be_feature_enabled('captain_integration')
-      expect(account).not_to be_feature_enabled('captain_integration_v2')
+      expect(account).to be_feature_enabled('captain_integration')
+      expect(account).to be_feature_enabled('captain_integration_v2')
+      expect(account).to be_feature_enabled('captain_document_auto_sync')
+      expect(account).to be_feature_enabled('custom_tools')
     end
   end
 
@@ -322,12 +326,18 @@ RSpec.describe Account, type: :model do
       expect(account.captain_document_sync_interval).to eq(1.day)
     end
 
-    it 'uses the enterprise cadence for self-hosted enterprise installs without a plan_name' do
-      allow(ChatwootApp).to receive(:self_hosted_enterprise?).and_return(true)
+    it 'uses the enterprise cadence when plan_name is blank' do
       create(:installation_config, name: 'CAPTAIN_DOCUMENT_AUTO_SYNC_INTERVALS', value: { enterprise: 6 }.to_json)
       account.update!(custom_attributes: {})
 
       expect(account.captain_document_sync_interval).to eq(6.hours)
+    end
+
+    it 'uses the enterprise cadence for plans without a configured interval' do
+      create(:installation_config, name: 'CAPTAIN_DOCUMENT_AUTO_SYNC_INTERVALS', value: { enterprise: 24 }.to_json)
+      account.update!(custom_attributes: { plan_name: 'hacker' })
+
+      expect(account.captain_document_sync_interval).to eq(1.day)
     end
 
     it 'allows installation config to disable a plan cadence' do

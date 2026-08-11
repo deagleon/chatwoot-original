@@ -21,7 +21,7 @@ class Captain::Documents::ScheduleSyncsJob < ApplicationJob
 
       stats[:accounts_scanned] += 1
       next unless account.feature_enabled?('captain_document_auto_sync')
-      next unless account_in_selected_plan?(account)
+      next unless account_in_selected_plan?(account, sync_intervals)
 
       stats[:accounts_enabled] += 1
       interval = account.captain_document_sync_interval(sync_intervals)
@@ -79,15 +79,17 @@ class Captain::Documents::ScheduleSyncsJob < ApplicationJob
     limit.positive? ? limit : default
   end
 
-  def account_in_selected_plan?(account)
+  def account_in_selected_plan?(account, sync_intervals)
     return true if @plan_name.blank?
 
-    account_sync_plan(account) == @plan_name
+    account_sync_plan(account, sync_intervals) == @plan_name
   end
 
-  def account_sync_plan(account)
-    plan = account.custom_attributes['plan_name']
-    plan = 'enterprise' if plan.blank? && ChatwootApp.self_hosted_enterprise?
+  def account_sync_plan(account, sync_intervals)
+    plan = account.custom_attributes['plan_name'].presence || 'enterprise'
+    # Plans without an explicit interval inherit the enterprise cadence so that
+    # document auto-sync works for every account type
+    plan = 'enterprise' unless sync_intervals.key?(plan.downcase)
     plan.to_s.downcase.presence
   end
 

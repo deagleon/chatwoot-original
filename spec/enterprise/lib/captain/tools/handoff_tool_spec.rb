@@ -111,6 +111,10 @@ RSpec.describe Captain::Tools::HandoffTool, type: :model do
       end
 
       context 'with Captain V1' do
+        before do
+          account.disable_features!('captain_integration_v2')
+        end
+
         let(:tool_context) do
           Struct.new(:state).new({ conversation: { id: conversation.id }, responding_to_message_id: responding_to_message.id })
         end

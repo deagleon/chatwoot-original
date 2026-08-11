@@ -59,10 +59,10 @@ module Enterprise::Account
   end
 
   def captain_document_sync_interval(sync_intervals = Enterprise::Account.captain_document_sync_intervals)
-    plan = custom_attributes['plan_name']
-    plan = 'enterprise' if plan.blank? && ChatwootApp.self_hosted_enterprise?
-    return nil if plan.blank?
-
+    plan = custom_attributes['plan_name'].presence || 'enterprise'
+    # Plans without an explicit interval inherit the enterprise cadence so that
+    # document auto-sync works for every account type
+    plan = 'enterprise' unless sync_intervals.key?(plan.downcase)
     interval_hours = sync_intervals[plan.downcase]
     return nil unless interval_hours.is_a?(Integer) && interval_hours.positive?
 
@@ -107,11 +107,8 @@ module Enterprise::Account
 
   def enable_default_features
     super
-    if ChatwootApp.self_hosted_enterprise?
-      enable_features('captain_integration', 'captain_integration_v2')
-    elsif ChatwootApp.chatwoot_cloud?
-      internal_attributes[CAPTAIN_V2_DEFAULT_ELIGIBLE] = true
-    end
+    enable_features('captain_integration', 'captain_integration_v2', 'captain_document_auto_sync', 'custom_tools')
+    internal_attributes[CAPTAIN_V2_DEFAULT_ELIGIBLE] = true if ChatwootApp.chatwoot_cloud?
   end
 
   def sync_assignment_features

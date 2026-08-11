@@ -22,6 +22,7 @@ RSpec.describe MessageTemplates::HookExecutionService do
       end
 
       it 'keeps the legacy job arguments for Captain V1' do
+        account.disable_features!(:captain_integration_v2)
         allow(Captain::Conversation::ResponseBuilderJob).to receive(:perform_later)
 
         create(:message, conversation: conversation, message_type: :incoming, account: account)
@@ -68,6 +69,7 @@ RSpec.describe MessageTemplates::HookExecutionService do
       end
 
       it 'uses only the current message attachments for Captain V1' do
+        account.disable_features!(:captain_integration_v2)
         create(:message, :with_attachment, conversation: conversation, message_type: :incoming, account: account)
         create(:message, :with_attachment, conversation: conversation, message_type: :incoming, account: account)
 
@@ -99,9 +101,11 @@ RSpec.describe MessageTemplates::HookExecutionService do
       end
 
       it 'schedules captain response job outside business hours (Captain always responds when configured)' do
-        expect(Captain::Conversation::ResponseBuilderJob).to receive(:perform_later).with(conversation, assistant)
+        allow(Captain::Conversation::ResponseBuilderJob).to receive(:perform_later)
 
-        create(:message, conversation: conversation, message_type: :incoming, account: account)
+        message = create(:message, conversation: conversation, message_type: :incoming, account: account)
+
+        expect(Captain::Conversation::ResponseBuilderJob).to have_received(:perform_later).with(conversation, assistant, message.id)
       end
 
       it 'performs captain handoff when quota is exceeded (OOO template will kick in after handoff)' do
@@ -132,9 +136,11 @@ RSpec.describe MessageTemplates::HookExecutionService do
       end
 
       it 'schedules captain response job regardless of time' do
-        expect(Captain::Conversation::ResponseBuilderJob).to receive(:perform_later).with(conversation, assistant)
+        allow(Captain::Conversation::ResponseBuilderJob).to receive(:perform_later)
 
-        create(:message, conversation: conversation, message_type: :incoming, account: account)
+        message = create(:message, conversation: conversation, message_type: :incoming, account: account)
+
+        expect(Captain::Conversation::ResponseBuilderJob).to have_received(:perform_later).with(conversation, assistant, message.id)
       end
 
       it 'emits the engagement event when captain V2 is enabled' do
@@ -147,6 +153,8 @@ RSpec.describe MessageTemplates::HookExecutionService do
       end
 
       it 'does not emit the engagement event when captain V2 is disabled' do
+        account.disable_features!('captain_integration_v2')
+
         expect(Captain::ConversationEvents).not_to receive(:engaged)
 
         create(:message, conversation: conversation, message_type: :incoming, account: account)
@@ -183,6 +191,8 @@ RSpec.describe MessageTemplates::HookExecutionService do
       end
 
       it 'does not emit a handoff event when captain V2 is disabled' do
+        account.disable_features!('captain_integration_v2')
+
         expect(Captain::ConversationEvents).not_to receive(:handed_off)
 
         create(:message, conversation: conversation, message_type: :incoming, account: account)
@@ -233,9 +243,11 @@ RSpec.describe MessageTemplates::HookExecutionService do
     end
 
     it 'schedules captain response job' do
-      expect(Captain::Conversation::ResponseBuilderJob).to receive(:perform_later).with(conversation, assistant)
+      allow(Captain::Conversation::ResponseBuilderJob).to receive(:perform_later)
 
-      create(:message, conversation: conversation, message_type: :incoming, account: account)
+      message = create(:message, conversation: conversation, message_type: :incoming, account: account)
+
+      expect(Captain::Conversation::ResponseBuilderJob).to have_received(:perform_later).with(conversation, assistant, message.id)
     end
   end
 
@@ -247,9 +259,11 @@ RSpec.describe MessageTemplates::HookExecutionService do
                                                        }))
       contact.update!(additional_attributes: { 'country_code' => 'CA' })
 
-      expect(Captain::Conversation::ResponseBuilderJob).to receive(:perform_later).with(conversation, assistant)
+      allow(Captain::Conversation::ResponseBuilderJob).to receive(:perform_later)
 
-      create(:message, conversation: conversation, message_type: :incoming, account: account)
+      message = create(:message, conversation: conversation, message_type: :incoming, account: account)
+
+      expect(Captain::Conversation::ResponseBuilderJob).to have_received(:perform_later).with(conversation, assistant, message.id)
     end
   end
 
@@ -270,9 +284,11 @@ RSpec.describe MessageTemplates::HookExecutionService do
         closed_all_day: true
       )
 
-      expect(Captain::Conversation::ResponseBuilderJob).to receive(:perform_later).with(conversation, assistant)
+      allow(Captain::Conversation::ResponseBuilderJob).to receive(:perform_later)
 
-      create(:message, conversation: conversation, message_type: :incoming, account: account)
+      message = create(:message, conversation: conversation, message_type: :incoming, account: account)
+
+      expect(Captain::Conversation::ResponseBuilderJob).to have_received(:perform_later).with(conversation, assistant, message.id)
     end
 
     it 'still schedules captain response job when business hours begin after captain took the conversation' do
@@ -287,9 +303,11 @@ RSpec.describe MessageTemplates::HookExecutionService do
         closed_all_day: false
       )
 
-      expect(Captain::Conversation::ResponseBuilderJob).to receive(:perform_later).with(conversation, assistant)
+      allow(Captain::Conversation::ResponseBuilderJob).to receive(:perform_later)
 
-      create(:message, conversation: conversation, message_type: :incoming, account: account)
+      message = create(:message, conversation: conversation, message_type: :incoming, account: account)
+
+      expect(Captain::Conversation::ResponseBuilderJob).to have_received(:perform_later).with(conversation, assistant, message.id)
     end
 
     it 'still schedules captain response job when both audience and schedule stop matching' do
@@ -304,9 +322,11 @@ RSpec.describe MessageTemplates::HookExecutionService do
         closed_all_day: true
       )
 
-      expect(Captain::Conversation::ResponseBuilderJob).to receive(:perform_later).with(conversation, assistant)
+      allow(Captain::Conversation::ResponseBuilderJob).to receive(:perform_later)
 
-      create(:message, conversation: conversation, message_type: :incoming, account: account)
+      message = create(:message, conversation: conversation, message_type: :incoming, account: account)
+
+      expect(Captain::Conversation::ResponseBuilderJob).to have_received(:perform_later).with(conversation, assistant, message.id)
     end
   end
 
@@ -427,9 +447,11 @@ RSpec.describe MessageTemplates::HookExecutionService do
     let(:campaign_conversation) { create(:conversation, inbox: inbox, account: account, contact: contact, status: :pending, campaign: campaign) }
 
     it 'schedules captain response job for incoming messages on pending campaign conversations' do
-      expect(Captain::Conversation::ResponseBuilderJob).to receive(:perform_later).with(campaign_conversation, assistant)
+      allow(Captain::Conversation::ResponseBuilderJob).to receive(:perform_later)
 
-      create(:message, conversation: campaign_conversation, message_type: :incoming, account: account)
+      message = create(:message, conversation: campaign_conversation, message_type: :incoming, account: account)
+
+      expect(Captain::Conversation::ResponseBuilderJob).to have_received(:perform_later).with(campaign_conversation, assistant, message.id)
     end
 
     it 'does not send greeting template on campaign conversations' do

@@ -176,6 +176,7 @@ describe Enterprise::Billing::HandleStripeEventService do
           account.enable_features(feature)
         end
         account.enable_features('captain_integration_v2')
+        account.enable_features('captain_integration', 'captain_document_auto_sync', 'custom_tools')
         account.enable_features(*described_class::BUSINESS_PLAN_FEATURES)
         account.enable_features(*described_class::ENTERPRISE_PLAN_FEATURES)
         account.save!
@@ -194,7 +195,11 @@ describe Enterprise::Billing::HandleStripeEventService do
         all_features.each do |feature|
           expect(account).not_to be_feature_enabled(feature)
         end
-        expect(account).not_to be_feature_enabled('captain_integration_v2')
+        # Captain features are available on all plans
+        expect(account).to be_feature_enabled('captain_integration')
+        expect(account).to be_feature_enabled('captain_document_auto_sync')
+        expect(account).to be_feature_enabled('custom_tools')
+        expect(account).to be_feature_enabled('captain_integration_v2')
       end
     end
 
