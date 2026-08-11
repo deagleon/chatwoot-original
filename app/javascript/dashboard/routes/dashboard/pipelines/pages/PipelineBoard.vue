@@ -167,12 +167,12 @@ const openCard = conversation => {
   selectedConversation.value = conversation;
 };
 
-const openFullConversation = () => {
-  if (!selectedConversation.value) return;
+const openFullConversation = (conversation = selectedConversation.value) => {
+  if (!conversation) return;
   const path = frontendURL(
     conversationUrl({
       accountId: route.params.accountId,
-      id: selectedConversation.value.id,
+      id: conversation.id,
     })
   );
   router.push({ path });
@@ -330,6 +330,7 @@ watch(
         :has-more="!!hasMoreByStage[stage.id]"
         @drop="handleDrop"
         @open-card="openCard"
+        @open-conversation="openFullConversation"
         @load-more="loadMore"
       />
     </div>

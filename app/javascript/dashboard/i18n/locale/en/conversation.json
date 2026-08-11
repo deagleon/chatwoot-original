@@ -222,7 +222,8 @@
           "SUCCESFUL": "Assigned team \"{team}\" to conversation id {conversationId}",
           "FAILED": "Couldn't assign team. Please try again."
         }
-      }
+      },
+      "OPEN_CONVERSATION": "Open conversation"
     },
     "FOOTER": {
       "MESSAGE_SIGN_TOOLTIP": "Message signature",
