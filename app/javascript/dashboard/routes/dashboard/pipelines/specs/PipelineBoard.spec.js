@@ -14,14 +14,22 @@ vi.mock('dashboard/api/pipelines', () => ({
   },
 }));
 
+const mockConversationShow = vi.fn();
+
 vi.mock('dashboard/api/inbox/conversation', () => ({
   default: {
     moveToStage: (...args) => mockMoveToStage(...args),
+    show: (...args) => mockConversationShow(...args),
   },
 }));
 
+const { mockStoreDispatch, mockStoreCommit } = vi.hoisted(() => ({
+  mockStoreDispatch: vi.fn(),
+  mockStoreCommit: vi.fn(),
+}));
+
 vi.mock('dashboard/composables/store', () => ({
-  useStore: () => ({ dispatch: vi.fn() }),
+  useStore: () => ({ dispatch: mockStoreDispatch, commit: mockStoreCommit }),
   useMapGetter: getter => {
     if (getter === 'inboxes/getInboxes') return ref([]);
     if (getter === 'agents/getAgents') return ref([]);
@@ -108,12 +116,23 @@ const mountComponent = () =>
     global: {
       stubs: {
         Icon: { template: '<span />' },
-        SidePanel: { template: '<div />' },
+        Dialog: {
+          // O Dialog real é controlado por ref (open/close): o stub simula
+          // para o teste validar que o board chama open() ao selecionar.
+          data: () => ({ isOpen: false }),
+          methods: {
+            open() {
+              this.isOpen = true;
+            },
+          },
+          template: '<div v-if="isOpen">{{ $attrs.title }}<slot /></div>',
+        },
+        ConversationBox: { template: '<div data-testid="conversation-box" />' },
         PipelineBoardColumn: {
           props: ['stage', 'conversations', 'loading', 'hasMore'],
-          emits: ['drop', 'open-card', 'load-more'],
+          emits: ['drop', 'open-card', 'open-conversation', 'load-more'],
           template:
-            '<div data-testid="column" :data-stage-id="stage.id" @drop="$emit(\'drop\', { stageId: stage.id, conversationId: 100 })" />',
+            '<div data-testid="column" :data-stage-id="stage.id" @drop="$emit(\'drop\', { stageId: stage.id, conversationId: 100 })"><button data-testid="ctx-open" @click="$emit(\'open-conversation\', { id: 100, status: \'open\', meta: { sender: { name: \'Charlie\' } }, messages: [{ id: 1, content: \'Proposal sent\' }] })" /></div>',
         },
       },
     },
@@ -185,10 +204,9 @@ describe('PipelineBoard', () => {
 
     const initialCallCount = mockStageConversations.mock.calls.length;
 
-    const assigneeSelect = wrapper.find(
-      'select[aria-label="PIPELINES.BOARD.FILTER.ASSIGNEE"]'
-    );
-    await assigneeSelect.setValue('42');
+    // ComboBox (single) emite update:modelValue quando o usuário seleciona.
+    const assigneeComboBox = wrapper.findComponent({ name: 'ComboBox' });
+    assigneeComboBox.vm.$emit('update:modelValue', 42);
 
     await flushPromises();
 
@@ -196,5 +214,49 @@ describe('PipelineBoard', () => {
     expect(mockStageConversations.mock.calls.length).toBeGreaterThan(
       initialCallCount
     );
+  });
+
+  it('re-fetches conversations when a multi-select filter changes', async () => {
+    const wrapper = mountComponent();
+    await flushPromises();
+
+    const initialCallCount = mockStageConversations.mock.calls.length;
+
+    // Filtro de status (TagMultiSelectComboBox, opções estáticas): o v-model
+    // precisa receber uma referência nova para o watch do board disparar o
+    // refetch (regressão: re-emitir o mesmo array mutado não atualizava).
+    const statusComboBox = wrapper.findAllComponents({
+      name: 'TagMultiSelectComboBox',
+    })[1];
+    await statusComboBox.find('div.cursor-pointer').trigger('click');
+    await statusComboBox.findAll('[role="option"]')[0].trigger('click');
+
+    await flushPromises();
+
+    expect(mockStageConversations.mock.calls.length).toBeGreaterThan(
+      initialCallCount
+    );
+  });
+
+  it('opens the conversation preview dialog with the embedded conversation box', async () => {
+    mockConversationShow.mockResolvedValue({
+      data: { id: 100, status: 'open', meta: { sender: { name: 'Charlie' } } },
+    });
+    mockStoreCommit.mockClear();
+    const wrapper = mountComponent();
+    await flushPromises();
+
+    await wrapper.get('[data-testid="ctx-open"]').trigger('click');
+    await flushPromises();
+
+    expect(mockConversationShow).toHaveBeenCalledWith(100);
+    expect(mockStoreCommit).toHaveBeenCalledWith('SET_ALL_CONVERSATION', [
+      { id: 100, status: 'open', meta: { sender: { name: 'Charlie' } } },
+    ]);
+    expect(mockStoreCommit).toHaveBeenCalledWith('SET_CURRENT_CHAT_WINDOW', {
+      id: 100,
+    });
+    expect(wrapper.get('[data-testid="conversation-box"]').exists()).toBe(true);
+    expect(wrapper.text()).toContain('Charlie');
   });
 });

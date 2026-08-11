@@ -56,7 +56,8 @@
         "LABEL": "Label",
         "STATUS": "Status",
         "ALL_STATUSES": "All statuses",
-        "SEARCH_PLACEHOLDER": "Search conversations..."
+        "SEARCH_PLACEHOLDER": "Search conversations...",
+        "ALL_LABELS": "All labels"
       },
       "COLUMN": {
         "ADD_STAGE": "Add stage",
@@ -75,7 +76,8 @@
         "ID": "ID"
       },
       "DRAWER": {
-        "OPEN": "Open conversation"
+        "OPEN": "Open conversation",
+        "NO_MESSAGES": "No messages in this conversation yet."
       }
     }
   }

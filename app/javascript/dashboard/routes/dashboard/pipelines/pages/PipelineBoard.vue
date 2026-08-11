@@ -6,23 +6,33 @@ import {
   onMounted,
   onBeforeUnmount,
   watch,
+  defineAsyncComponent,
 } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { useRoute } from 'vue-router';
 import { useI18n } from 'vue-i18n';
-import { useMapGetter } from 'dashboard/composables/store';
+import { useStore, useMapGetter } from 'dashboard/composables/store';
 import { useAlert } from 'dashboard/composables';
 import { emitter } from 'shared/helpers/mitt';
 import { BUS_EVENTS } from 'shared/constants/busEvents';
-import { conversationUrl, frontendURL } from 'dashboard/helper/URLHelper';
 
+import types from 'dashboard/store/mutation-types';
 import PipelinesAPI from 'dashboard/api/pipelines';
 import ConversationAPI from 'dashboard/api/inbox/conversation';
 import Icon from 'dashboard/components-next/icon/Icon.vue';
-import SidePanel from 'dashboard/components-next/side-panel/SidePanel.vue';
+import Dialog from 'dashboard/components-next/dialog/Dialog.vue';
+import NextInput from 'dashboard/components-next/input/Input.vue';
+import ComboBox from 'dashboard/components-next/combobox/ComboBox.vue';
+import TagMultiSelectComboBox from 'dashboard/components-next/combobox/TagMultiSelectComboBox.vue';
+
+// Lazy: o ConversationBox (mensagens + composer + prosemirror) só carrega
+// quando o preview abre — o board inicial não paga esse custo.
+const ConversationBox = defineAsyncComponent(
+  () => import('dashboard/components/widgets/conversation/ConversationBox.vue')
+);
 import PipelineBoardColumn from '../components/PipelineBoardColumn.vue';
 
 const route = useRoute();
-const router = useRouter();
+const store = useStore();
 const { t } = useI18n();
 
 const inboxes = useMapGetter('inboxes/getInboxes');
@@ -37,6 +47,7 @@ const loadingByStage = reactive({});
 const hasMoreByStage = reactive({});
 const pageByStage = reactive({});
 const selectedConversation = ref(null);
+const previewDialogRef = ref(null);
 const isLoading = ref(false);
 
 const filters = reactive({
@@ -48,6 +59,9 @@ const filters = reactive({
 });
 
 let searchDebounce = null;
+// Contador de requests do preview: só a resposta do clique mais recente pode
+// escrever no store (evita overwrite por resposta antiga que chega atrasada).
+let conversationPreviewRequest = 0;
 
 const statusOptions = [
   { value: 'open', label: 'Open' },
@@ -55,6 +69,18 @@ const statusOptions = [
   { value: 'pending', label: 'Pending' },
   { value: 'snoozed', label: 'Snoozed' },
 ];
+
+const inboxOptions = computed(() =>
+  (inboxes.value || []).map(i => ({ value: i.id, label: i.name }))
+);
+const assigneeOptions = computed(() => [
+  { value: null, label: t('PIPELINES.BOARD.FILTER.ALL_ASSIGNEES') },
+  ...(agents.value || []).map(a => ({ value: a.id, label: a.name })),
+]);
+const labelOptions = computed(() => [
+  { value: null, label: t('PIPELINES.BOARD.FILTER.ALL_LABELS') },
+  ...(labels.value || []).map(l => ({ value: l.title, label: l.title })),
+]);
 
 const buildParams = () => {
   const params = {};
@@ -163,19 +189,34 @@ const handleDrop = async ({ stageId, conversationId }) => {
   }
 };
 
-const openCard = conversation => {
+// Preview da conversa: carrega a conversa completa no store e abre o modal com
+// o ConversationBox embutido — todas as funcionalidades da conversa (mensagens,
+// composer, ações) sem navegar para fora do board.
+//
+// getConversation só atualiza conversas já na lista do store; a conversa do
+// board não está lá — então buscamos via API e adicionamos + selecionamos.
+const openConversationInPanel = async conversation => {
+  conversationPreviewRequest += 1;
+  const requestId = conversationPreviewRequest;
   selectedConversation.value = conversation;
+  try {
+    const { data } = await ConversationAPI.show(conversation.id);
+    // Cliques rápidos em cards diferentes podem resolver fora de ordem: só a
+    // resposta do request mais recente pode escrever no store/abrir o modal.
+    if (requestId !== conversationPreviewRequest) return;
+    store.commit(types.SET_ALL_CONVERSATION, [data]);
+    store.commit(types.SET_CURRENT_CHAT_WINDOW, { id: data.id });
+  } catch {
+    if (requestId !== conversationPreviewRequest) return;
+    // Fallback: o payload do board já carrega a conversa (mensagens inclusas).
+    store.commit(types.SET_ALL_CONVERSATION, [conversation]);
+    store.commit(types.SET_CURRENT_CHAT_WINDOW, { id: conversation.id });
+  }
+  previewDialogRef.value?.open();
 };
 
-const openFullConversation = () => {
-  if (!selectedConversation.value) return;
-  const path = frontendURL(
-    conversationUrl({
-      accountId: route.params.accountId,
-      id: selectedConversation.value.id,
-    })
-  );
-  router.push({ path });
+const openCard = conversation => {
+  openConversationInPanel(conversation);
 };
 
 const loadMore = stageId => {
@@ -245,67 +286,46 @@ watch(
 
 <template>
   <div class="flex flex-col h-full min-h-0">
-    <!-- Filter bar -->
+    <!-- Filter bar — usa os componentes do design system (ComboBox single,
+         TagMultiSelectComboBox multi) em vez de <select> nativos: visual
+         consistente com a lista de conversas e a página de conversa. -->
     <div
-      class="flex items-center gap-3 px-4 py-2 border-b border-n-weak flex-shrink-0"
+      class="flex items-center gap-2 px-4 py-2 border-b border-n-weak flex-shrink-0"
     >
-      <select
+      <TagMultiSelectComboBox
         v-model="filters.inbox_ids"
-        multiple
-        class="text-sm border border-n-weak rounded px-2 py-1 bg-n-solid-1 text-n-slate-12 max-w-40"
+        :options="inboxOptions"
+        :placeholder="t('PIPELINES.BOARD.FILTER.INBOX')"
         :aria-label="t('PIPELINES.BOARD.FILTER.INBOX')"
-      >
-        <option value="" disabled>
-          {{ t('PIPELINES.BOARD.FILTER.ALL_INBOXES') }}
-        </option>
-        <option v-for="inbox in inboxes" :key="inbox.id" :value="inbox.id">
-          {{ inbox.name }}
-        </option>
-      </select>
-      <select
+        class="max-w-48"
+      />
+      <ComboBox
         v-model="filters.assignee_id"
-        class="text-sm border border-n-weak rounded px-2 py-1 bg-n-solid-1 text-n-slate-12"
+        :options="assigneeOptions"
+        :placeholder="t('PIPELINES.BOARD.FILTER.ASSIGNEE')"
         :aria-label="t('PIPELINES.BOARD.FILTER.ASSIGNEE')"
-      >
-        <option :value="null">
-          {{ t('PIPELINES.BOARD.FILTER.ALL_ASSIGNEES') }}
-        </option>
-        <option v-for="agent in agents" :key="agent.id" :value="agent.id">
-          {{ agent.name }}
-        </option>
-      </select>
-      <select
+        class="max-w-40"
+      />
+      <ComboBox
         v-model="filters.label"
-        class="text-sm border border-n-weak rounded px-2 py-1 bg-n-solid-1 text-n-slate-12"
+        :options="labelOptions"
+        :placeholder="t('PIPELINES.BOARD.FILTER.LABEL')"
         :aria-label="t('PIPELINES.BOARD.FILTER.LABEL')"
-      >
-        <option :value="null">—</option>
-        <option v-for="label in labels" :key="label.id" :value="label.title">
-          {{ label.title }}
-        </option>
-      </select>
-      <select
+        class="max-w-40"
+      />
+      <TagMultiSelectComboBox
         v-model="filters.status"
-        multiple
-        class="text-sm border border-n-weak rounded px-2 py-1 bg-n-solid-1 text-n-slate-12 max-w-40"
+        :options="statusOptions"
+        :placeholder="t('PIPELINES.BOARD.FILTER.STATUS')"
         :aria-label="t('PIPELINES.BOARD.FILTER.STATUS')"
-      >
-        <option value="" disabled>
-          {{ t('PIPELINES.BOARD.FILTER.ALL_STATUSES') }}
-        </option>
-        <option
-          v-for="opt in statusOptions"
-          :key="opt.value"
-          :value="opt.value"
-        >
-          {{ opt.label }}
-        </option>
-      </select>
-      <input
+        class="max-w-48"
+      />
+      <NextInput
         v-model="filters.q"
         type="text"
+        size="sm"
         :placeholder="t('PIPELINES.BOARD.FILTER.SEARCH_PLACEHOLDER')"
-        class="text-sm border border-n-weak rounded px-2 py-1 bg-n-solid-1 text-n-slate-12 flex-1 max-w-60"
+        class="flex-1 max-w-60"
         @input="onSearchInput"
       />
     </div>
@@ -330,35 +350,33 @@ watch(
         :has-more="!!hasMoreByStage[stage.id]"
         @drop="handleDrop"
         @open-card="openCard"
+        @open-conversation="openConversationInPanel"
         @load-more="loadMore"
       />
     </div>
 
-    <!-- Drawer -->
-    <SidePanel
-      v-if="selectedConversation"
+    <!-- Preview da conversa: ConversationBox embutido (header + mensagens +
+         composer completos). O Dialog é ref-based — o open() precisa ser chamado. -->
+    <Dialog
+      ref="previewDialogRef"
       :title="selectedConversation?.meta?.sender?.name ?? ''"
-      width="lg"
+      width="3xl"
+      :show-cancel-button="false"
+      :show-confirm-button="false"
       @close="selectedConversation = null"
     >
-      <div class="flex flex-col gap-4">
-        <div class="flex items-center gap-2">
-          <span
-            class="text-xs px-2 py-1 rounded font-medium bg-n-alpha-2 text-n-slate-12"
-          >
-            {{ selectedConversation?.status }}
-          </span>
-          <span class="text-xs text-n-slate-10">
-            {{ t('PIPELINES.BOARD.CARD.ID') }}: {{ selectedConversation?.id }}
-          </span>
-        </div>
-        <button
-          class="text-sm text-n-brand hover:underline"
-          @click="openFullConversation"
-        >
-          {{ t('PIPELINES.BOARD.DRAWER.OPEN') }}
-        </button>
+      <!-- Modal com altura que acomoda o conteúdo típico (header + mensagens +
+           composer) e cresce até 80vh para conversas longas. O flex-1 + h-full
+           no ConversationBox permite que o MessagesView (que tem h-full +
+           flex-grow) ocupe o espaço entre header e composer. -->
+      <div class="flex flex-col min-h-[28rem] h-[36rem] max-h-[80vh]">
+        <ConversationBox
+          class="h-full flex-1 min-h-0 flex flex-col"
+          :is-contact-panel-open="false"
+          :is-on-expanded-layout="false"
+          is-inbox-view
+        />
       </div>
-    </SidePanel>
+    </Dialog>
   </div>
 </template>

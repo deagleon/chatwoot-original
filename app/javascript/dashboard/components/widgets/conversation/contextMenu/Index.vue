@@ -16,6 +16,7 @@ import NextInput from 'dashboard/components-next/input/Input.vue';
 import Icon from 'dashboard/components-next/icon/Icon.vue';
 
 const MENU = {
+  OPEN_CONVERSATION: 'open-conversation',
   MARK_AS_READ: 'mark-as-read',
   MARK_AS_UNREAD: 'mark-as-unread',
   PRIORITY: 'priority',
@@ -72,6 +73,7 @@ export default {
     },
   },
   emits: [
+    'openConversation',
     'updateConversation',
     'assignPriority',
     'markAsUnread',
@@ -94,6 +96,11 @@ export default {
       MENU,
       labelSearchQuery: '',
       STATUS_TYPE: wootConstants.STATUS_TYPE,
+      openConversationOption: {
+        key: MENU.OPEN_CONVERSATION,
+        label: this.$t('CONVERSATION.CARD_CONTEXT_MENU.OPEN_CONVERSATION'),
+        icon: 'open',
+      },
       readOption: {
         label: this.$t('CONVERSATION.CARD_CONTEXT_MENU.MARK_AS_READ'),
         icon: 'mail',
@@ -297,6 +304,14 @@ export default {
   <div
     class="p-1 rounded-md shadow-xl bg-n-alpha-3/50 backdrop-blur-[100px] outline-1 outline outline-n-weak/50"
   >
+    <template v-if="isAllowed([MENU.OPEN_CONVERSATION])">
+      <MenuItem
+        :option="openConversationOption"
+        variant="icon"
+        @click.stop="$emit('openConversation')"
+      />
+      <hr class="m-1 rounded border-b border-n-weak dark:border-n-weak" />
+    </template>
     <template v-if="isAllowed([MENU.MARK_AS_READ, MENU.MARK_AS_UNREAD])">
       <MenuItem
         v-if="!hasUnreadMessages"

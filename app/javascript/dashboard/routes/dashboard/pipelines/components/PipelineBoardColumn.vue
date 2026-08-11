@@ -23,7 +23,12 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(['drop', 'open-card', 'load-more']);
+const emit = defineEmits([
+  'drop',
+  'open-card',
+  'open-conversation',
+  'load-more',
+]);
 
 const { t } = useI18n();
 
@@ -89,6 +94,7 @@ const onDragOver = e => {
           :conversation="conversation"
           :stage="stage"
           @open="conv => emit('open-card', conv)"
+          @open-conversation="conv => emit('open-conversation', conv)"
         />
         <div
           v-if="conversations.length === 0 && !loading"
