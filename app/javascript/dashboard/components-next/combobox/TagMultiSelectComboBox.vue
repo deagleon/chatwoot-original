@@ -77,14 +77,17 @@ const toggleOption = option => {
   } else {
     selectedValues.value.splice(index, 1);
   }
-  emit('update:modelValue', selectedValues.value);
+  // Emite uma cópia: re-emitir a mesma referência mutada faz o pai pular a
+  // atualização do v-model (watchers de v-model não disparam — ex.: o
+  // refetch do board de pipelines ao filtrar por inbox/status).
+  emit('update:modelValue', [...selectedValues.value]);
 };
 
 const removeTag = value => {
   const index = selectedValues.value.indexOf(value);
   if (index !== -1) {
     selectedValues.value.splice(index, 1);
-    emit('update:modelValue', selectedValues.value);
+    emit('update:modelValue', [...selectedValues.value]);
   }
 };
 
