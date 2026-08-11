@@ -200,10 +200,9 @@ describe('PipelineBoard', () => {
 
     const initialCallCount = mockStageConversations.mock.calls.length;
 
-    const assigneeSelect = wrapper.find(
-      'select[aria-label="PIPELINES.BOARD.FILTER.ASSIGNEE"]'
-    );
-    await assigneeSelect.setValue('42');
+    // ComboBox (single) emite update:modelValue quando o usuário seleciona.
+    const assigneeComboBox = wrapper.findComponent({ name: 'ComboBox' });
+    assigneeComboBox.vm.$emit('update:modelValue', 42);
 
     await flushPromises();
 

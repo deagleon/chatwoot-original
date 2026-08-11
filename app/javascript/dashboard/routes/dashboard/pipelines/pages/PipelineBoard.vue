@@ -21,6 +21,9 @@ import PipelinesAPI from 'dashboard/api/pipelines';
 import ConversationAPI from 'dashboard/api/inbox/conversation';
 import Icon from 'dashboard/components-next/icon/Icon.vue';
 import Dialog from 'dashboard/components-next/dialog/Dialog.vue';
+import NextInput from 'dashboard/components-next/input/Input.vue';
+import ComboBox from 'dashboard/components-next/combobox/ComboBox.vue';
+import TagMultiSelectComboBox from 'dashboard/components-next/combobox/TagMultiSelectComboBox.vue';
 
 // Lazy: o ConversationBox (mensagens + composer + prosemirror) só carrega
 // quando o preview abre — o board inicial não paga esse custo.
@@ -65,6 +68,16 @@ const statusOptions = [
   { value: 'pending', label: 'Pending' },
   { value: 'snoozed', label: 'Snoozed' },
 ];
+
+const inboxOptions = computed(() =>
+  (inboxes.value || []).map(i => ({ value: i.id, label: i.name }))
+);
+const assigneeOptions = computed(() =>
+  (agents.value || []).map(a => ({ value: a.id, label: a.name }))
+);
+const labelOptions = computed(() =>
+  (labels.value || []).map(l => ({ value: l.title, label: l.title }))
+);
 
 const buildParams = () => {
   const params = {};
@@ -275,67 +288,46 @@ watch(
 
 <template>
   <div class="flex flex-col h-full min-h-0">
-    <!-- Filter bar -->
+    <!-- Filter bar — usa os componentes do design system (ComboBox single,
+         TagMultiSelectComboBox multi) em vez de <select> nativos: visual
+         consistente com a lista de conversas e a página de conversa. -->
     <div
-      class="flex items-center gap-3 px-4 py-2 border-b border-n-weak flex-shrink-0"
+      class="flex items-center gap-2 px-4 py-2 border-b border-n-weak flex-shrink-0"
     >
-      <select
+      <TagMultiSelectComboBox
         v-model="filters.inbox_ids"
-        multiple
-        class="text-sm border border-n-weak rounded px-2 py-1 bg-n-solid-1 text-n-slate-12 max-w-40"
+        :options="inboxOptions"
+        :placeholder="t('PIPELINES.BOARD.FILTER.INBOX')"
         :aria-label="t('PIPELINES.BOARD.FILTER.INBOX')"
-      >
-        <option value="" disabled>
-          {{ t('PIPELINES.BOARD.FILTER.ALL_INBOXES') }}
-        </option>
-        <option v-for="inbox in inboxes" :key="inbox.id" :value="inbox.id">
-          {{ inbox.name }}
-        </option>
-      </select>
-      <select
+        class="max-w-48"
+      />
+      <ComboBox
         v-model="filters.assignee_id"
-        class="text-sm border border-n-weak rounded px-2 py-1 bg-n-solid-1 text-n-slate-12"
+        :options="assigneeOptions"
+        :placeholder="t('PIPELINES.BOARD.FILTER.ASSIGNEE')"
         :aria-label="t('PIPELINES.BOARD.FILTER.ASSIGNEE')"
-      >
-        <option :value="null">
-          {{ t('PIPELINES.BOARD.FILTER.ALL_ASSIGNEES') }}
-        </option>
-        <option v-for="agent in agents" :key="agent.id" :value="agent.id">
-          {{ agent.name }}
-        </option>
-      </select>
-      <select
+        class="max-w-40"
+      />
+      <ComboBox
         v-model="filters.label"
-        class="text-sm border border-n-weak rounded px-2 py-1 bg-n-solid-1 text-n-slate-12"
+        :options="labelOptions"
+        :placeholder="t('PIPELINES.BOARD.FILTER.LABEL')"
         :aria-label="t('PIPELINES.BOARD.FILTER.LABEL')"
-      >
-        <option :value="null">—</option>
-        <option v-for="label in labels" :key="label.id" :value="label.title">
-          {{ label.title }}
-        </option>
-      </select>
-      <select
+        class="max-w-40"
+      />
+      <TagMultiSelectComboBox
         v-model="filters.status"
-        multiple
-        class="text-sm border border-n-weak rounded px-2 py-1 bg-n-solid-1 text-n-slate-12 max-w-40"
+        :options="statusOptions"
+        :placeholder="t('PIPELINES.BOARD.FILTER.STATUS')"
         :aria-label="t('PIPELINES.BOARD.FILTER.STATUS')"
-      >
-        <option value="" disabled>
-          {{ t('PIPELINES.BOARD.FILTER.ALL_STATUSES') }}
-        </option>
-        <option
-          v-for="opt in statusOptions"
-          :key="opt.value"
-          :value="opt.value"
-        >
-          {{ opt.label }}
-        </option>
-      </select>
-      <input
+        class="max-w-48"
+      />
+      <NextInput
         v-model="filters.q"
         type="text"
+        size="sm"
         :placeholder="t('PIPELINES.BOARD.FILTER.SEARCH_PLACEHOLDER')"
-        class="text-sm border border-n-weak rounded px-2 py-1 bg-n-solid-1 text-n-slate-12 flex-1 max-w-60"
+        class="flex-1 max-w-60"
         @input="onSearchInput"
       />
     </div>
@@ -381,7 +373,7 @@ watch(
            flex-grow) ocupe o espaço entre header e composer. -->
       <div class="flex flex-col min-h-[28rem] h-[36rem] max-h-[80vh]">
         <ConversationBox
-          :class="'h-full flex-1 min-h-0 flex flex-col'"
+          class="h-full flex-1 min-h-0 flex flex-col"
           :is-contact-panel-open="false"
           :is-on-expanded-layout="false"
           :is-inbox-view="true"
