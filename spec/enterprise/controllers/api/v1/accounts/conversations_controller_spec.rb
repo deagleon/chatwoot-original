@@ -340,5 +340,54 @@ RSpec.describe 'Conversations API', type: :request do
         expect(conversation.reload.pipeline_stage_id).to eq(target_stage.id)
       end
     end
+
+    context 'when agent has conversation_manage without inbox access' do
+      before do
+        custom_role = create(:custom_role, account: account, permissions: ['conversation_manage'])
+        account.account_users.find_by(user_id: agent.id).update!(custom_role: custom_role)
+      end
+
+      it 'denies the move (permissão ampla não fura o escopo por inbox)' do
+        post "/api/v1/accounts/#{account.id}/conversations/#{conversation.display_id}/pipeline_stage",
+             headers: agent.create_new_auth_token,
+             params: { pipeline_stage_id: target_stage.id }, as: :json
+
+        expect(response).to have_http_status(:unauthorized)
+        expect(conversation.reload.pipeline_stage_id).to eq(source_stage.id)
+      end
+    end
+
+    context 'when agent has conversation_manage with inbox access' do
+      before do
+        create(:inbox_member, user: agent, inbox: conversation.inbox)
+        custom_role = create(:custom_role, account: account, permissions: ['conversation_manage'])
+        account.account_users.find_by(user_id: agent.id).update!(custom_role: custom_role)
+      end
+
+      it 'moves the conversation to the target stage' do
+        post "/api/v1/accounts/#{account.id}/conversations/#{conversation.display_id}/pipeline_stage",
+             headers: agent.create_new_auth_token,
+             params: { pipeline_stage_id: target_stage.id }, as: :json
+
+        expect(response).to have_http_status(:success)
+        expect(conversation.reload.pipeline_stage_id).to eq(target_stage.id)
+      end
+    end
+
+    context 'when agent has conversation_unassigned_manage without inbox access' do
+      before do
+        custom_role = create(:custom_role, account: account, permissions: ['conversation_unassigned_manage'])
+        account.account_users.find_by(user_id: agent.id).update!(custom_role: custom_role)
+      end
+
+      it 'denies the move (permissão ampla não fura o escopo por inbox)' do
+        post "/api/v1/accounts/#{account.id}/conversations/#{conversation.display_id}/pipeline_stage",
+             headers: agent.create_new_auth_token,
+             params: { pipeline_stage_id: target_stage.id }, as: :json
+
+        expect(response).to have_http_status(:unauthorized)
+        expect(conversation.reload.pipeline_stage_id).to eq(source_stage.id)
+      end
+    end
   end
 end
