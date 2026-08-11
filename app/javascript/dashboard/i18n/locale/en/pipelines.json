@@ -75,7 +75,8 @@
         "ID": "ID"
       },
       "DRAWER": {
-        "OPEN": "Open conversation"
+        "OPEN": "Open conversation",
+        "NO_MESSAGES": "No messages in this conversation yet."
       }
     }
   }

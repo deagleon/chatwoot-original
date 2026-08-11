@@ -108,12 +108,19 @@ const mountComponent = () =>
     global: {
       stubs: {
         Icon: { template: '<span />' },
-        SidePanel: { template: '<div />' },
+        SidePanel: {
+          // O SidePanel real é controlado por ref (open/close): o stub simula
+          // para o teste validar que o board chama open() ao selecionar.
+          data: () => ({ isOpen: false }),
+          methods: { open() { this.isOpen = true; } },
+          template:
+            '<div v-if="isOpen">{{ $attrs.title }}<slot /></div>',
+        },
         PipelineBoardColumn: {
           props: ['stage', 'conversations', 'loading', 'hasMore'],
-          emits: ['drop', 'open-card', 'load-more'],
+          emits: ['drop', 'open-card', 'open-conversation', 'load-more'],
           template:
-            '<div data-testid="column" :data-stage-id="stage.id" @drop="$emit(\'drop\', { stageId: stage.id, conversationId: 100 })" />',
+            '<div data-testid="column" :data-stage-id="stage.id" @drop="$emit(\'drop\', { stageId: stage.id, conversationId: 100 })"><button data-testid="ctx-open" @click="$emit(\'open-conversation\', { id: 100, status: \'open\', meta: { sender: { name: \'Charlie\' } }, messages: [{ id: 1, content: \'Proposal sent\' }] })" /></div>',
         },
       },
     },
@@ -196,5 +203,16 @@ describe('PipelineBoard', () => {
     expect(mockStageConversations.mock.calls.length).toBeGreaterThan(
       initialCallCount
     );
+  });
+
+  it('opens the conversation in the side panel from the context menu action', async () => {
+    const wrapper = mountComponent();
+    await flushPromises();
+
+    await wrapper.get('[data-testid="ctx-open"]').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Charlie');
+    expect(wrapper.text()).toContain('Proposal sent');
   });
 });

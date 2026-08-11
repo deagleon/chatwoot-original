@@ -37,6 +37,7 @@ const loadingByStage = reactive({});
 const hasMoreByStage = reactive({});
 const pageByStage = reactive({});
 const selectedConversation = ref(null);
+const sidePanelRef = ref(null);
 const isLoading = ref(false);
 
 const filters = reactive({
@@ -164,7 +165,15 @@ const handleDrop = async ({ stageId, conversationId }) => {
 };
 
 const openCard = conversation => {
+  openConversationInPanel(conversation);
+};
+
+// Abre a conversa no painel lateral (o SidePanel é controlado por ref — o
+// v-if sozinho não abre: o open() precisa ser chamado). "Open conversation"
+// do menu de contexto usa o mesmo caminho; o botão Open do drawer navega.
+const openConversationInPanel = conversation => {
   selectedConversation.value = conversation;
+  sidePanelRef.value?.open();
 };
 
 const openFullConversation = (conversation = selectedConversation.value) => {
@@ -330,14 +339,16 @@ watch(
         :has-more="!!hasMoreByStage[stage.id]"
         @drop="handleDrop"
         @open-card="openCard"
-        @open-conversation="openFullConversation"
+        @open-conversation="openConversationInPanel"
         @load-more="loadMore"
       />
     </div>
 
     <!-- Drawer -->
+    <!-- Sem v-if: o SidePanel é controlado por open()/close() (ref-based) —
+         montá-lo no mesmo tick da seleção faria o ref ainda estar null. -->
     <SidePanel
-      v-if="selectedConversation"
+      ref="sidePanelRef"
       :title="selectedConversation?.meta?.sender?.name ?? ''"
       width="lg"
       @close="selectedConversation = null"
@@ -353,6 +364,21 @@ watch(
             {{ t('PIPELINES.BOARD.CARD.ID') }}: {{ selectedConversation?.id }}
           </span>
         </div>
+        <div
+          v-if="selectedConversation?.messages?.length"
+          class="flex flex-col gap-2 max-h-72 overflow-y-auto"
+        >
+          <p
+            v-for="message in selectedConversation.messages"
+            :key="message.id"
+            class="m-0 text-sm text-n-slate-11 break-words"
+          >
+            {{ message.content }}
+          </p>
+        </div>
+        <p v-else class="m-0 text-sm text-n-slate-11">
+          {{ t('PIPELINES.BOARD.DRAWER.NO_MESSAGES') }}
+        </p>
         <button
           class="text-sm text-n-brand hover:underline"
           @click="openFullConversation"
