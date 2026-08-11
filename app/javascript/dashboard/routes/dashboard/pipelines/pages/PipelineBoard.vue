@@ -6,23 +6,32 @@ import {
   onMounted,
   onBeforeUnmount,
   watch,
+  defineAsyncComponent,
 } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
-import { useMapGetter } from 'dashboard/composables/store';
+import { useStore, useMapGetter } from 'dashboard/composables/store';
 import { useAlert } from 'dashboard/composables';
 import { emitter } from 'shared/helpers/mitt';
 import { BUS_EVENTS } from 'shared/constants/busEvents';
 import { conversationUrl, frontendURL } from 'dashboard/helper/URLHelper';
 
+import types from 'dashboard/store/mutation-types';
 import PipelinesAPI from 'dashboard/api/pipelines';
 import ConversationAPI from 'dashboard/api/inbox/conversation';
 import Icon from 'dashboard/components-next/icon/Icon.vue';
-import SidePanel from 'dashboard/components-next/side-panel/SidePanel.vue';
+import Dialog from 'dashboard/components-next/dialog/Dialog.vue';
+
+// Lazy: o ConversationBox (mensagens + composer + prosemirror) só carrega
+// quando o preview abre — o board inicial não paga esse custo.
+const ConversationBox = defineAsyncComponent(
+  () => import('dashboard/components/widgets/conversation/ConversationBox.vue')
+);
 import PipelineBoardColumn from '../components/PipelineBoardColumn.vue';
 
 const route = useRoute();
 const router = useRouter();
+const store = useStore();
 const { t } = useI18n();
 
 const inboxes = useMapGetter('inboxes/getInboxes');
@@ -37,7 +46,7 @@ const loadingByStage = reactive({});
 const hasMoreByStage = reactive({});
 const pageByStage = reactive({});
 const selectedConversation = ref(null);
-const sidePanelRef = ref(null);
+const previewDialogRef = ref(null);
 const isLoading = ref(false);
 
 const filters = reactive({
@@ -168,12 +177,24 @@ const openCard = conversation => {
   openConversationInPanel(conversation);
 };
 
-// Abre a conversa no painel lateral (o SidePanel é controlado por ref — o
-// v-if sozinho não abre: o open() precisa ser chamado). "Open conversation"
-// do menu de contexto usa o mesmo caminho; o botão Open do drawer navega.
-const openConversationInPanel = conversation => {
+// Preview da conversa: carrega a conversa completa no store e abre o modal com
+// o ConversationBox embutido — todas as funcionalidades da conversa (mensagens,
+// composer, ações) sem navegar para fora do board.
+//
+// getConversation só atualiza conversas já na lista do store; a conversa do
+// board não está lá — então buscamos via API e adicionamos + selecionamos.
+const openConversationInPanel = async conversation => {
   selectedConversation.value = conversation;
-  sidePanelRef.value?.open();
+  try {
+    const { data } = await ConversationAPI.show(conversation.id);
+    store.commit(types.SET_ALL_CONVERSATION, [data]);
+    store.commit(types.SET_CURRENT_CHAT_WINDOW, { id: data.id });
+  } catch {
+    // Fallback: o payload do board já carrega a conversa (mensagens inclusas).
+    store.commit(types.SET_ALL_CONVERSATION, [conversation]);
+    store.commit(types.SET_CURRENT_CHAT_WINDOW, { id: conversation.id });
+  }
+  previewDialogRef.value?.open();
 };
 
 const openFullConversation = (conversation = selectedConversation.value) => {
@@ -344,48 +365,23 @@ watch(
       />
     </div>
 
-    <!-- Drawer -->
-    <!-- Sem v-if: o SidePanel é controlado por open()/close() (ref-based) —
-         montá-lo no mesmo tick da seleção faria o ref ainda estar null. -->
-    <SidePanel
-      ref="sidePanelRef"
+    <!-- Preview da conversa: ConversationBox embutido (header + mensagens +
+         composer completos). O Dialog é ref-based — o open() precisa ser chamado. -->
+    <Dialog
+      ref="previewDialogRef"
       :title="selectedConversation?.meta?.sender?.name ?? ''"
-      width="lg"
+      width="3xl"
+      :show-cancel-button="false"
+      :show-confirm-button="false"
       @close="selectedConversation = null"
     >
-      <div class="flex flex-col gap-4">
-        <div class="flex items-center gap-2">
-          <span
-            class="text-xs px-2 py-1 rounded font-medium bg-n-alpha-2 text-n-slate-12"
-          >
-            {{ selectedConversation?.status }}
-          </span>
-          <span class="text-xs text-n-slate-10">
-            {{ t('PIPELINES.BOARD.CARD.ID') }}: {{ selectedConversation?.id }}
-          </span>
-        </div>
-        <div
-          v-if="selectedConversation?.messages?.length"
-          class="flex flex-col gap-2 max-h-72 overflow-y-auto"
-        >
-          <p
-            v-for="message in selectedConversation.messages"
-            :key="message.id"
-            class="m-0 text-sm text-n-slate-11 break-words"
-          >
-            {{ message.content }}
-          </p>
-        </div>
-        <p v-else class="m-0 text-sm text-n-slate-11">
-          {{ t('PIPELINES.BOARD.DRAWER.NO_MESSAGES') }}
-        </p>
-        <button
-          class="text-sm text-n-brand hover:underline"
-          @click="openFullConversation"
-        >
-          {{ t('PIPELINES.BOARD.DRAWER.OPEN') }}
-        </button>
+      <div class="h-[75vh]">
+        <ConversationBox
+          :is-contact-panel-open="false"
+          :is-on-expanded-layout="false"
+          :is-inbox-view="true"
+        />
       </div>
-    </SidePanel>
+    </Dialog>
   </div>
 </template>

@@ -14,14 +14,22 @@ vi.mock('dashboard/api/pipelines', () => ({
   },
 }));
 
+const mockConversationShow = vi.fn();
+
 vi.mock('dashboard/api/inbox/conversation', () => ({
   default: {
     moveToStage: (...args) => mockMoveToStage(...args),
+    show: (...args) => mockConversationShow(...args),
   },
 }));
 
+const { mockStoreDispatch, mockStoreCommit } = vi.hoisted(() => ({
+  mockStoreDispatch: vi.fn(),
+  mockStoreCommit: vi.fn(),
+}));
+
 vi.mock('dashboard/composables/store', () => ({
-  useStore: () => ({ dispatch: vi.fn() }),
+  useStore: () => ({ dispatch: mockStoreDispatch, commit: mockStoreCommit }),
   useMapGetter: getter => {
     if (getter === 'inboxes/getInboxes') return ref([]);
     if (getter === 'agents/getAgents') return ref([]);
@@ -108,14 +116,14 @@ const mountComponent = () =>
     global: {
       stubs: {
         Icon: { template: '<span />' },
-        SidePanel: {
-          // O SidePanel real é controlado por ref (open/close): o stub simula
+        Dialog: {
+          // O Dialog real é controlado por ref (open/close): o stub simula
           // para o teste validar que o board chama open() ao selecionar.
           data: () => ({ isOpen: false }),
           methods: { open() { this.isOpen = true; } },
-          template:
-            '<div v-if="isOpen">{{ $attrs.title }}<slot /></div>',
+          template: '<div v-if="isOpen">{{ $attrs.title }}<slot /></div>',
         },
+        ConversationBox: { template: '<div data-testid="conversation-box" />' },
         PipelineBoardColumn: {
           props: ['stage', 'conversations', 'loading', 'hasMore'],
           emits: ['drop', 'open-card', 'open-conversation', 'load-more'],
@@ -205,14 +213,25 @@ describe('PipelineBoard', () => {
     );
   });
 
-  it('opens the conversation in the side panel from the context menu action', async () => {
+  it('opens the conversation preview dialog with the embedded conversation box', async () => {
+    mockConversationShow.mockResolvedValue({
+      data: { id: 100, status: 'open', meta: { sender: { name: 'Charlie' } } },
+    });
+    mockStoreCommit.mockClear();
     const wrapper = mountComponent();
     await flushPromises();
 
     await wrapper.get('[data-testid="ctx-open"]').trigger('click');
     await flushPromises();
 
+    expect(mockConversationShow).toHaveBeenCalledWith(100);
+    expect(mockStoreCommit).toHaveBeenCalledWith('SET_ALL_CONVERSATION', [
+      { id: 100, status: 'open', meta: { sender: { name: 'Charlie' } } },
+    ]);
+    expect(mockStoreCommit).toHaveBeenCalledWith('SET_CURRENT_CHAT_WINDOW', {
+      id: 100,
+    });
+    expect(wrapper.get('[data-testid="conversation-box"]').exists()).toBe(true);
     expect(wrapper.text()).toContain('Charlie');
-    expect(wrapper.text()).toContain('Proposal sent');
   });
 });
