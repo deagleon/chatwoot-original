@@ -17,7 +17,7 @@ vi.mock('dashboard/api/scheduledMessages', () => ({
   },
 }));
 
-const DATETIME_FORMAT = "yyyy-MM-dd'T'HH:mm";
+const DISPLAY_FORMAT = 'dd/MM/yyyy HH:mm';
 
 const store = createStore({
   getters: {
@@ -60,7 +60,7 @@ describe('ScheduledMessageModal', () => {
     const wrapper = mountModal();
     await flushPromises();
 
-    const pastDate = format(new Date(Date.now() - 60000), DATETIME_FORMAT);
+    const pastDate = format(new Date(Date.now() - 60000), DISPLAY_FORMAT);
     await wrapper.find('[data-testid="scheduled-datetime"]').setValue(pastDate);
     await wrapper.find('[data-testid="scheduled-submit"]').trigger('click');
     await nextTick();
@@ -119,7 +119,7 @@ describe('ScheduledMessageModal', () => {
 
     expect(
       wrapper.find('[data-testid="scheduled-datetime"]').element.value
-    ).toBe(format(scheduledAt, DATETIME_FORMAT));
+    ).toBe(format(scheduledAt, DISPLAY_FORMAT));
 
     await wrapper.find('[data-testid="scheduled-submit"]').trigger('click');
     await flushPromises();

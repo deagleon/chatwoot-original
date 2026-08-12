@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { addHours, format } from 'date-fns';
+import { addHours, format, parse } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
 
 import Modal from 'dashboard/components/Modal.vue';
@@ -30,21 +30,34 @@ const accountTimezone = computed(
 );
 
 const datetime = ref('');
+const datetimeText = ref('');
 const internalNote = ref('');
 const errorMessage = ref('');
 const isSaving = ref(false);
 
+// O input é texto livre no formato dd/mm/yyyy hh:mm (o datetime-local nativo
+// renderiza no formato do browser, que não é controlável).
 const DATETIME_FORMAT = "yyyy-MM-dd'T'HH:mm";
-const PREVIEW_FORMAT = 'MMM dd, yyyy HH:mm';
+const DISPLAY_FORMAT = 'dd/MM/yyyy HH:mm';
 
 const toLocalInputValue = date => format(new Date(date), DATETIME_FORMAT);
+const toDisplayValue = date => format(new Date(date), DISPLAY_FORMAT);
+
+const onDatetimeInput = event => {
+  datetimeText.value = event.target.value;
+  const parsed = parse(datetimeText.value, DISPLAY_FORMAT, new Date());
+  if (!Number.isNaN(parsed.getTime())) {
+    datetime.value = format(parsed, DATETIME_FORMAT);
+  }
+  errorMessage.value = '';
+};
 
 const previewDatetime = computed(() => {
   if (!datetime.value) return '';
   return formatInTimeZone(
     new Date(datetime.value),
     accountTimezone.value,
-    PREVIEW_FORMAT
+    DISPLAY_FORMAT
   );
 });
 
@@ -58,6 +71,7 @@ const resetForm = () => {
     datetime.value = toLocalInputValue(addHours(new Date(), 1));
     internalNote.value = '';
   }
+  datetimeText.value = toDisplayValue(datetime.value);
 };
 
 watch(
@@ -111,7 +125,7 @@ const onSubmit = async () => {
           date: formatInTimeZone(
             new Date(data.scheduled_at),
             accountTimezone.value,
-            PREVIEW_FORMAT
+            DISPLAY_FORMAT
           ),
         })
       );
@@ -168,11 +182,13 @@ const onSubmit = async () => {
             </label>
             <input
               id="scheduled-datetime"
-              v-model="datetime"
+              :value="datetimeText"
               data-testid="scheduled-datetime"
-              type="datetime-local"
+              type="text"
+              inputmode="numeric"
+              :placeholder="t('SCHEDULED_MESSAGES.DATETIME_PLACEHOLDER')"
               class="w-full rounded-lg border border-n-weak bg-n-solid-1 px-3 py-2 text-sm text-n-slate-12 focus:border-n-brand focus:outline-none"
-              @input="errorMessage = ''"
+              @input="onDatetimeInput"
             />
             <p
               v-if="previewDatetime"
@@ -213,6 +229,7 @@ const onSubmit = async () => {
 
           <div class="flex justify-end gap-2">
             <Button
+              type="button"
               ghost
               slate
               size="sm"

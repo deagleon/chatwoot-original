@@ -223,7 +223,12 @@
           "FAILED": "Couldn't assign team. Please try again."
         }
       },
-      "OPEN_CONVERSATION": "Open conversation"
+      "OPEN_CONVERSATION": "Open conversation",
+      "MOVE_TO_PIPELINE": "Move to pipeline",
+      "PIPELINE_STAGE_MOVE": {
+        "SUCCESFUL": "Conversation moved to the pipeline stage",
+        "FAILED": "Couldn't move conversation. Please try again."
+      }
     },
     "FOOTER": {
       "MESSAGE_SIGN_TOOLTIP": "Message signature",
@@ -559,6 +564,14 @@
     "STATUS_FAILED": "Falhou",
     "STATUS_CANCELLED": "Cancelada",
     "STATUS_PENDING": "Pendente",
-    "RETRY": "Tentar novamente"
+    "RETRY": "Tentar novamente",
+    "DATETIME_PLACEHOLDER": "dd/mm/yyyy hh:mm",
+    "TIMELINE_TITLE": "Mensagens agendadas",
+    "TIMELINE_EXPAND": "Expandir histórico",
+    "TIMELINE_COLLAPSE": "Recolher histórico",
+    "TIMELINE_DELETE": "Excluir",
+    "DELETE_CONFIRM": "Excluir este agendamento?",
+    "CONFIRM_DELETE": "Excluir",
+    "DELETE_SUCCESS": "Agendamento excluído"
   }
 }
