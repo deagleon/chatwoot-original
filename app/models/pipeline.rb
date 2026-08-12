@@ -24,6 +24,7 @@ class Pipeline < ApplicationRecord
 
   belongs_to :account
   has_many :pipeline_stages, dependent: :destroy_async
+  accepts_nested_attributes_for :pipeline_stages
 
   validates :name, presence: true
 
@@ -42,6 +43,10 @@ class Pipeline < ApplicationRecord
   private
 
   def create_default_stages!
+    # Custom stages are provided through nested attributes at creation; the
+    # defaults only apply when the pipeline is created without any.
+    return if pipeline_stages.any?
+
     DEFAULT_STAGES.each_with_index do |stage, index|
       pipeline_stages.create!(name: stage[:name], color: stage[:color], position: index + 1)
     end

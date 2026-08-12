@@ -112,6 +112,7 @@ class Api::V1::Accounts::ConversationsController < Api::V1::Accounts::BaseContro
     authorize @conversation, :update?
     stage = Current.account.pipeline_stages.find(params[:pipeline_stage_id])
     @conversation.move_to_stage!(stage)
+    Integrations::Trello::MoveCardJob.perform_later(@conversation.id) if @conversation.trello_card_id.present?
   end
 
   def toggle_typing_status

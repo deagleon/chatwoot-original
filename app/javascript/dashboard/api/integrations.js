@@ -38,6 +38,28 @@ class IntegrationsAPI extends ApiClient {
       shop_domain: shopDomain,
     });
   }
+
+  fetchTrelloBoards({ apiKey, token }) {
+    return axios.post(`${this.baseUrl()}/integrations/trello/boards`, {
+      api_key: apiKey,
+      token,
+    });
+  }
+
+  connectTrello({ apiKey, token, boardId, whatsappInboxId }) {
+    return axios.post(`${this.baseUrl()}/integrations/trello`, {
+      api_key: apiKey,
+      token,
+      board_id: boardId,
+      whatsapp_inbox_id: whatsappInboxId,
+    });
+  }
+
+  disconnectTrello({ boardId }) {
+    return axios.delete(`${this.baseUrl()}/integrations/trello`, {
+      data: { board_id: boardId },
+    });
+  }
 }
 
 export default new IntegrationsAPI();

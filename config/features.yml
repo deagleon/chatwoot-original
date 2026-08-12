@@ -275,3 +275,7 @@
   display_name: Scheduled Messages
   enabled: false
   column: feature_flags_ext_1
+- name: trello_integration
+  display_name: Trello Integration
+  enabled: false
+  column: feature_flags_ext_1
