@@ -14,6 +14,8 @@ class Api::V1::Accounts::PipelinesController < Api::V1::Accounts::BaseController
   end
 
   def update
+    return render json: { error: 'Cannot delete a stage with conversations' }, status: :conflict if stages_to_destroy_with_conversations?
+
     @pipeline.update!(pipeline_params)
   end
 
@@ -33,6 +35,17 @@ class Api::V1::Accounts::PipelinesController < Api::V1::Accounts::BaseController
   end
 
   def pipeline_params
-    params.require(:pipeline).permit(:name)
+    params.require(:pipeline).permit(
+      :name,
+      pipeline_stages_attributes: [:id, :name, :color, :position, :_destroy]
+    )
+  end
+
+  def stages_to_destroy_with_conversations?
+    attrs = params.dig(:pipeline, :pipeline_stages_attributes) || []
+    destroy_ids = attrs.select { |a| ActiveModel::Type::Boolean.new.cast(a[:_destroy]) }.pluck(:id)
+    return false if destroy_ids.empty?
+
+    @pipeline.pipeline_stages.where(id: destroy_ids).joins(:conversations).exists?
   end
 end

@@ -1302,7 +1302,6 @@ ActiveRecord::Schema[7.1].define(version: 2026_08_13_000000) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.string "trello_list_id"
-    t.index ["pipeline_id", "position"], name: "index_pipeline_stages_on_pipeline_id_and_position", unique: true
     t.index ["pipeline_id", "trello_list_id"], name: "index_pipeline_stages_on_pipeline_id_and_trello_list_id", unique: true, where: "(trello_list_id IS NOT NULL)"
     t.index ["pipeline_id"], name: "index_pipeline_stages_on_pipeline_id"
   end

@@ -12,15 +12,16 @@
 #
 # Indexes
 #
-#  index_pipeline_stages_on_pipeline_id               (pipeline_id)
-#  index_pipeline_stages_on_pipeline_id_and_position  (pipeline_id,position) UNIQUE
+#  index_pipeline_stages_on_pipeline_id  (pipeline_id)
 #
 class PipelineStage < ApplicationRecord
   belongs_to :pipeline
   has_many :conversations, dependent: :restrict_with_error
 
   validates :name, presence: true
-  validates :position, presence: true, uniqueness: { scope: :pipeline_id }
+  # Position is a display-order hint; duplicate positions are tolerated during
+  # batch reorders (nested attribute updates swap adjacent stages mid-save).
+  validates :position, presence: true
 
   def conversations_count
     self[:conversations_count] || conversations.count

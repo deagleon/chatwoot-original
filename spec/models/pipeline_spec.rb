@@ -44,6 +44,40 @@ RSpec.describe Pipeline do
     end
   end
 
+  describe 'custom stages via nested attributes' do
+    it 'creates the provided stages and skips defaults' do
+      pipeline = described_class.create!(
+        account: account,
+        name: 'Sales',
+        pipeline_stages_attributes: [
+          { name: 'Lead', color: '#FF0000', position: 1 },
+          { name: 'Won', color: '#00FF00', position: 2 }
+        ]
+      )
+
+      expect(pipeline.pipeline_stages.map(&:name)).to eq(%w[Lead Won])
+      expect(pipeline.pipeline_stages.map(&:position)).to eq([1, 2])
+      expect(pipeline.pipeline_stages.first.color).to eq('#FF0000')
+    end
+
+    it 'reorders and renames stages on update' do
+      pipeline = create(:pipeline, account: account)
+      first, second, third, fourth = pipeline.pipeline_stages.order(:position).to_a
+
+      pipeline.update!(
+        pipeline_stages_attributes: [
+          { id: second.id, name: 'Renamed', color: second.color, position: 1 },
+          { id: first.id, name: first.name, color: first.color, position: 2 },
+          { id: third.id, name: third.name, color: third.color, position: 3 },
+          { id: fourth.id, name: fourth.name, color: fourth.color, position: 4 }
+        ]
+      )
+
+      expect(pipeline.pipeline_stages.reload.order(:position).map(&:id)).to eq([second.id, first.id, third.id, fourth.id])
+      expect(pipeline.pipeline_stages.find(second.id).name).to eq('Renamed')
+    end
+  end
+
   describe '#archive!' do
     let(:pipeline) { create(:pipeline, account: account) }
 

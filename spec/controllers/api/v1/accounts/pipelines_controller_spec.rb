@@ -64,6 +64,25 @@ RSpec.describe 'Pipeline API', type: :request do
         expect(new_pipeline.name).to eq('Sales')
         expect(new_pipeline.pipeline_stages.count).to eq(Pipeline::DEFAULT_STAGES.length)
       end
+
+      it 'creates a pipeline with custom stages' do
+        expect do
+          post "/api/v1/accounts/#{account.id}/pipelines", headers: admin.create_new_auth_token,
+                                                           params: {
+                                                             pipeline: {
+                                                               name: 'Sales',
+                                                               pipeline_stages_attributes: [
+                                                                 { name: 'Lead', color: '#FF0000', position: 1 },
+                                                                 { name: 'Won', color: '#00FF00', position: 2 }
+                                                               ]
+                                                             }
+                                                           }, as: :json
+        end.to change(Pipeline, :count).by(1)
+
+        new_pipeline = Pipeline.last
+        expect(new_pipeline.pipeline_stages.map(&:name)).to eq(%w[Lead Won])
+        expect(new_pipeline.pipeline_stages.map(&:position)).to eq([1, 2])
+      end
     end
   end
 
@@ -73,6 +92,55 @@ RSpec.describe 'Pipeline API', type: :request do
                                                                        params: { pipeline: { name: 'Renamed' } }, as: :json
       expect(response).to have_http_status(:success)
       expect(pipeline.reload.name).to eq('Renamed')
+    end
+
+    it 'reorders and renames stages via nested attributes' do
+      first, second, third, fourth = pipeline.pipeline_stages.order(:position).to_a
+
+      patch "/api/v1/accounts/#{account.id}/pipelines/#{pipeline.id}", headers: admin.create_new_auth_token,
+                                                                       params: {
+                                                                         pipeline: {
+                                                                           pipeline_stages_attributes: [
+                                                                             { id: second.id, name: 'Follow-up!', color: second.color, position: 1 },
+                                                                             { id: first.id, name: first.name, color: first.color, position: 2 },
+                                                                             { id: third.id, name: third.name, color: third.color, position: 3 },
+                                                                             { id: fourth.id, name: fourth.name, color: fourth.color, position: 4 }
+                                                                           ]
+                                                                         }
+                                                                       }, as: :json
+
+      expect(response).to have_http_status(:success)
+      expect(pipeline.pipeline_stages.reload.order(:position).map(&:id)).to eq([second.id, first.id, third.id, fourth.id])
+      expect(pipeline.pipeline_stages.find(second.id).name).to eq('Follow-up!')
+    end
+
+    it 'returns 409 when removing a stage that has conversations' do
+      stage = pipeline.pipeline_stages.first
+      create(:conversation, account: account, pipeline_stage: stage)
+
+      patch "/api/v1/accounts/#{account.id}/pipelines/#{pipeline.id}", headers: admin.create_new_auth_token,
+                                                                       params: {
+                                                                         pipeline: {
+                                                                           pipeline_stages_attributes: [{ id: stage.id, _destroy: true }]
+                                                                         }
+                                                                       }, as: :json
+
+      expect(response).to have_http_status(:conflict)
+      expect(PipelineStage.exists?(stage.id)).to be(true)
+    end
+
+    it 'removes an empty stage via nested attributes' do
+      stage = pipeline.pipeline_stages.first
+
+      patch "/api/v1/accounts/#{account.id}/pipelines/#{pipeline.id}", headers: admin.create_new_auth_token,
+                                                                       params: {
+                                                                         pipeline: {
+                                                                           pipeline_stages_attributes: [{ id: stage.id, _destroy: true }]
+                                                                         }
+                                                                       }, as: :json
+
+      expect(response).to have_http_status(:success)
+      expect(PipelineStage.exists?(stage.id)).to be(false)
     end
   end
 
