@@ -2,6 +2,7 @@
 import { mapGetters } from 'vuex';
 import { useAdmin } from 'dashboard/composables/useAdmin';
 import { useAlert } from 'dashboard/composables';
+import ConversationAPI from 'dashboard/api/inbox/conversation';
 import { copyTextToClipboard } from 'shared/helpers/clipboard';
 import {
   getSortedAgentsByAvailability,
@@ -28,6 +29,7 @@ const MENU = {
   DELETE: 'delete',
   OPEN_NEW_TAB: 'open-new-tab',
   COPY_LINK: 'copy-link',
+  MOVE_TO_PIPELINE: 'move-to-pipeline',
 };
 
 export default {
@@ -197,7 +199,24 @@ export default {
       assignableAgentsUiFlags: 'inboxAssignableAgents/getUIFlags',
       currentUser: 'getCurrentUser',
       currentAccountId: 'getCurrentAccountId',
+      pipelines: 'pipelines/getPipelines',
     }),
+    moveToPipelineConfig() {
+      return {
+        key: MENU.MOVE_TO_PIPELINE,
+        icon: 'arrow-right-import',
+        label: this.$t('CONVERSATION.CARD_CONTEXT_MENU.MOVE_TO_PIPELINE'),
+        options: (this.pipelines || []).map(pipeline => ({
+          key: pipeline.id,
+          label: pipeline.name,
+          icon: 'arrow-right-import',
+          options: (pipeline.stages || []).map(stage => ({
+            key: stage.id,
+            label: stage.name,
+          })),
+        })),
+      };
+    },
     filteredAgentOnAvailability() {
       const agents = this.$store.getters[
         'inboxAssignableAgents/getAssignableAgents'
@@ -240,6 +259,9 @@ export default {
   },
   mounted() {
     this.$store.dispatch('inboxAssignableAgents/fetch', [this.inboxId]);
+    if (!this.pipelines?.length) {
+      this.$store.dispatch('pipelines/get');
+    }
   },
   methods: {
     isAllowed(keys) {
@@ -256,6 +278,25 @@ export default {
     },
     assignPriority(priority) {
       this.$emit('assignPriority', priority);
+    },
+    async moveToStage(pipelineStageId) {
+      try {
+        await ConversationAPI.moveToStage({
+          conversationId: this.chatId,
+          pipelineStageId,
+        });
+        useAlert(
+          this.$t(
+            'CONVERSATION.CARD_CONTEXT_MENU.PIPELINE_STAGE_MOVE.SUCCESFUL'
+          )
+        );
+      } catch (error) {
+        useAlert(
+          this.$t('CONVERSATION.CARD_CONTEXT_MENU.PIPELINE_STAGE_MOVE.FAILED')
+        );
+      } finally {
+        this.$emit('close');
+      }
     },
     deleteConversation() {
       this.$emit('deleteConversation', this.chatId);
@@ -435,6 +476,28 @@ export default {
           :option="generateMenuLabelConfig(team, 'team')"
           @click.stop="$emit('assignTeam', team)"
         />
+      </MenuItemWithSubmenu>
+      <hr class="m-1 rounded border-b border-n-weak dark:border-n-weak" />
+    </template>
+    <template
+      v-if="
+        isAllowed([MENU.MOVE_TO_PIPELINE]) &&
+        moveToPipelineConfig.options.length
+      "
+    >
+      <MenuItemWithSubmenu :option="moveToPipelineConfig" :scrollable="false">
+        <MenuItemWithSubmenu
+          v-for="pipeline in moveToPipelineConfig.options"
+          :key="pipeline.key"
+          :option="pipeline"
+        >
+          <MenuItem
+            v-for="stage in pipeline.options"
+            :key="stage.key"
+            :option="stage"
+            @click.stop="moveToStage(stage.key)"
+          />
+        </MenuItemWithSubmenu>
       </MenuItemWithSubmenu>
       <hr class="m-1 rounded border-b border-n-weak dark:border-n-weak" />
     </template>
