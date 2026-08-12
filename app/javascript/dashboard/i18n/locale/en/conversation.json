@@ -223,7 +223,12 @@
           "FAILED": "Couldn't assign team. Please try again."
         }
       },
-      "OPEN_CONVERSATION": "Open conversation"
+      "OPEN_CONVERSATION": "Open conversation",
+      "MOVE_TO_PIPELINE": "Move to pipeline",
+      "PIPELINE_STAGE_MOVE": {
+        "SUCCESFUL": "Conversation moved to the pipeline stage",
+        "FAILED": "Couldn't move conversation. Please try again."
+      }
     },
     "FOOTER": {
       "MESSAGE_SIGN_TOOLTIP": "Message signature",

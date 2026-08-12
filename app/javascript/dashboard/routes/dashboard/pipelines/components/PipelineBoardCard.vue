@@ -90,6 +90,7 @@ const allowedOptions = [
   'agent',
   'team',
   'label',
+  'move-to-pipeline',
   'open-new-tab',
   'copy-link',
   'delete',
