@@ -8,13 +8,12 @@ import {
   watch,
   defineAsyncComponent,
 } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { useRoute } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { useStore, useMapGetter } from 'dashboard/composables/store';
 import { useAlert } from 'dashboard/composables';
 import { emitter } from 'shared/helpers/mitt';
 import { BUS_EVENTS } from 'shared/constants/busEvents';
-import { conversationUrl, frontendURL } from 'dashboard/helper/URLHelper';
 
 import types from 'dashboard/store/mutation-types';
 import PipelinesAPI from 'dashboard/api/pipelines';
@@ -33,7 +32,6 @@ const ConversationBox = defineAsyncComponent(
 import PipelineBoardColumn from '../components/PipelineBoardColumn.vue';
 
 const route = useRoute();
-const router = useRouter();
 const store = useStore();
 const { t } = useI18n();
 
@@ -186,10 +184,6 @@ const handleDrop = async ({ stageId, conversationId }) => {
   }
 };
 
-const openCard = conversation => {
-  openConversationInPanel(conversation);
-};
-
 // Preview da conversa: carrega a conversa completa no store e abre o modal com
 // o ConversationBox embutido — todas as funcionalidades da conversa (mensagens,
 // composer, ações) sem navegar para fora do board.
@@ -210,15 +204,8 @@ const openConversationInPanel = async conversation => {
   previewDialogRef.value?.open();
 };
 
-const openFullConversation = (conversation = selectedConversation.value) => {
-  if (!conversation) return;
-  const path = frontendURL(
-    conversationUrl({
-      accountId: route.params.accountId,
-      id: conversation.id,
-    })
-  );
-  router.push({ path });
+const openCard = conversation => {
+  openConversationInPanel(conversation);
 };
 
 const loadMore = stageId => {
@@ -287,7 +274,7 @@ watch(
 </script>
 
 <template>
-  <div class="flex flex-col h-full min-h-0">
+  <div class="flex flex-col w-full h-full min-h-0 min-w-0">
     <!-- Filter bar — usa os componentes do design system (ComboBox single,
          TagMultiSelectComboBox multi) em vez de <select> nativos: visual
          consistente com a lista de conversas e a página de conversa. -->
@@ -376,7 +363,7 @@ watch(
           class="h-full flex-1 min-h-0 flex flex-col"
           :is-contact-panel-open="false"
           :is-on-expanded-layout="false"
-          :is-inbox-view="true"
+          :is-inbox-view
         />
       </div>
     </Dialog>
