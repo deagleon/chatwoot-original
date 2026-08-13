@@ -56,6 +56,15 @@ class Conversations::StageFilterService < Conversations::FilterService
   end
 
   def conversations
-    @conversations.order(pipeline_stage_changed_at: :asc).page(current_page)
+    @conversations.order(sort_order).page(current_page)
+  end
+
+  def sort_order
+    case @params[:sort_by]
+    when 'last_activity_at'
+      { last_activity_at: :desc, id: :desc }
+    else
+      { pipeline_stage_changed_at: :asc }
+    end
   end
 end

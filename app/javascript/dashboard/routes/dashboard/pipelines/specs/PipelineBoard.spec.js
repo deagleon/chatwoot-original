@@ -132,6 +132,9 @@ const mountComponent = () =>
           template: '<div v-if="isOpen">{{ $attrs.title }}<slot /></div>',
         },
         ConversationBox: { template: '<div data-testid="conversation-box" />' },
+        // Listener do snooze do palete ninja-keys — headless; sem stub o
+        // componente real quebra no mock de store sem getters.
+        CmdBarConversationSnooze: { template: '<span />' },
         PipelineBoardColumn: {
           props: ['stage', 'conversations', 'loading', 'hasMore'],
           emits: ['drop', 'open-card', 'open-conversation', 'load-more'],

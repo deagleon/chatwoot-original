@@ -18,6 +18,7 @@ import { BUS_EVENTS } from 'shared/constants/busEvents';
 import types from 'dashboard/store/mutation-types';
 import PipelinesAPI from 'dashboard/api/pipelines';
 import ConversationAPI from 'dashboard/api/inbox/conversation';
+import CmdBarConversationSnooze from 'dashboard/routes/dashboard/commands/CmdBarConversationSnooze.vue';
 import Icon from 'dashboard/components-next/icon/Icon.vue';
 import Dialog from 'dashboard/components-next/dialog/Dialog.vue';
 import NextInput from 'dashboard/components-next/input/Input.vue';
@@ -56,6 +57,7 @@ const filters = reactive({
   label: null,
   status: [],
   q: '',
+  sort_by: 'last_activity_at',
 });
 
 let searchDebounce = null;
@@ -68,6 +70,11 @@ const statusOptions = [
   { value: 'resolved', label: 'Resolved' },
   { value: 'pending', label: 'Pending' },
   { value: 'snoozed', label: 'Snoozed' },
+];
+
+const sortOptions = [
+  { value: 'last_activity_at', label: t('PIPELINES.BOARD.SORT.LAST_ACTIVITY') },
+  { value: 'oldest', label: t('PIPELINES.BOARD.SORT.OLDEST_IN_STAGE') },
 ];
 
 const inboxOptions = computed(() =>
@@ -89,6 +96,7 @@ const buildParams = () => {
   if (filters.label) params.label = filters.label;
   if (filters.status.length) params.status = filters.status;
   if (filters.q) params.q = filters.q;
+  if (filters.sort_by) params.sort_by = filters.sort_by;
   return params;
 };
 
@@ -149,6 +157,20 @@ const fetchAllColumns = () => {
   });
 };
 
+const sortColumn = stageId => {
+  const list = conversationsByStage[stageId];
+  if (!list) return;
+  if (filters.sort_by === 'last_activity_at') {
+    list.sort((a, b) => (b.last_activity_at || 0) - (a.last_activity_at || 0));
+  } else {
+    list.sort(
+      (a, b) =>
+        new Date(a.pipeline_stage_changed_at || 0).getTime() -
+        new Date(b.pipeline_stage_changed_at || 0).getTime()
+    );
+  }
+};
+
 const handleDrop = async ({ stageId, conversationId }) => {
   if (!conversationId) return;
 
@@ -162,14 +184,20 @@ const handleDrop = async ({ stageId, conversationId }) => {
   );
   if (!conversation) return;
 
-  // Optimistic move
+  // Optimistic move — o timestamp novo espelha o set_pipeline_stage_changed_at
+  // do backend para a ordenação FIFO local bater com o servidor.
   conversationsByStage[fromStage.id] = conversationsByStage[
     fromStage.id
   ].filter(c => c.id !== conversationId);
   conversationsByStage[stageId] = [
-    { ...conversation, pipeline_stage_id: stageId },
+    {
+      ...conversation,
+      pipeline_stage_id: stageId,
+      pipeline_stage_changed_at: new Date().toISOString(),
+    },
     ...conversationsByStage[stageId],
   ];
+  sortColumn(stageId);
 
   try {
     await ConversationAPI.moveToStage({
@@ -293,10 +321,13 @@ const onConversationUpdated = data => {
         ...conversationsByStage[newStageId],
       ];
     }
+    sortColumn(newStageId);
+    sortColumn(fromStage.id);
   } else {
     conversationsByStage[fromStage.id] = list.map(c =>
       c.id === conversationId ? { ...c, ...data } : c
     );
+    sortColumn(fromStage.id);
   }
 };
 
@@ -319,6 +350,7 @@ const onMessageCreated = data => {
       data.conversation?.last_activity_at ?? card.last_activity_at,
     ...(data.content ? { messages: [data] } : {}),
   };
+  sortColumn(stage.id);
 };
 
 const onCardMarkUnread = async conversationId => {
@@ -366,6 +398,7 @@ watch(
     () => filters.assignee_id,
     () => filters.label,
     () => filters.status,
+    () => filters.sort_by,
   ],
   () => fetchAllColumns()
 );
@@ -414,6 +447,13 @@ watch(
         :placeholder="t('PIPELINES.BOARD.FILTER.SEARCH_PLACEHOLDER')"
         class="flex-1 max-w-60"
         @input="onSearchInput"
+      />
+      <ComboBox
+        v-model="filters.sort_by"
+        :options="sortOptions"
+        :placeholder="t('PIPELINES.BOARD.SORT.PLACEHOLDER')"
+        :aria-label="t('PIPELINES.BOARD.SORT.PLACEHOLDER')"
+        class="max-w-52"
       />
     </div>
 
@@ -467,5 +507,10 @@ watch(
         />
       </div>
     </Dialog>
+
+    <!-- Listener do comando de snooze do palete ninja-keys (CMD_SNOOZE_CONVERSATION)
+         + modal de horário customizado. Sem ele o snooze do menu de contexto
+         do card não executa nada no board. -->
+    <CmdBarConversationSnooze />
   </div>
 </template>

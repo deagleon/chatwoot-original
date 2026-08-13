@@ -89,12 +89,14 @@ const conversationPath = computed(() =>
 const showContextMenu = ref(false);
 const contextMenu = ref({ x: 0, y: 0 });
 
-// Mesmas opções da lista de conversas, sem snooze (que depende do ninja-keys).
+// Mesmas opções da lista de conversas. O snooze abre o palete ninja-keys
+// (CommandBar global do dashboard) no grupo snooze_conversation.
 const allowedOptions = [
   'open-conversation',
   'mark-as-read',
   'mark-as-unread',
   'status',
+  'snooze',
   'priority',
   'agent',
   'team',

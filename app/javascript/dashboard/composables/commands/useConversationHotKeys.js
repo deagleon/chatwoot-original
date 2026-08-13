@@ -367,8 +367,12 @@ export function useConversationHotKeys() {
   });
 
   const shouldShowSnoozeOption = computed(() => {
+    // O menu de contexto do board de pipelines também abre o palete no grupo
+    // snooze_conversation; sem isso o palete abre vazio naquela rota.
+    const isPipelineBoardRoute = route.name === 'pipelines_board';
     return (
-      isAConversationRoute(route.name, true, false) && contextMenuChatId.value
+      (isAConversationRoute(route.name, true, false) || isPipelineBoardRoute) &&
+      contextMenuChatId.value
     );
   });
 

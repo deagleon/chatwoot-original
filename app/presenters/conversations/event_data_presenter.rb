@@ -58,7 +58,10 @@ class Conversations::EventDataPresenter < SimpleDelegator
       last_activity_at: last_activity_at.to_i,
       timestamp: last_activity_at.to_i,
       created_at: created_at.to_i,
-      updated_at: updated_at.to_f
+      updated_at: updated_at.to_f,
+      # ISO na serialização (mesmo shape do payload do board); manter como
+      # datetime para o `new Date(...)` do frontend não confundir epoch (s) com ms.
+      pipeline_stage_changed_at: pipeline_stage_changed_at
     }
   end
 end
