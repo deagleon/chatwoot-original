@@ -6,6 +6,7 @@ import { frontendURL, conversationUrl } from 'dashboard/helper/URLHelper';
 
 import Icon from 'dashboard/components-next/icon/Icon.vue';
 import Avatar from 'dashboard/components-next/avatar/Avatar.vue';
+import UnreadBadge from 'dashboard/components-next/Conversation/ConversationCard/UnreadBadge.vue';
 import ContextMenu from 'dashboard/components/ui/ContextMenu.vue';
 import ConversationContextMenu from 'dashboard/components/widgets/conversation/contextMenu/Index.vue';
 
@@ -20,11 +21,19 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(['open', 'openConversation']);
+const emit = defineEmits([
+  'open',
+  'openConversation',
+  'markRead',
+  'markUnread',
+]);
 
 const { t } = useI18n();
 const store = useStore();
 const accountId = useMapGetter('getCurrentAccountId');
+
+const hasUnread = computed(() => (props.conversation.unread_count || 0) > 0);
+const unreadCount = computed(() => props.conversation.unread_count || 0);
 
 const contact = computed(() => props.conversation?.meta?.sender ?? {});
 const contactName = computed(() => contact.value?.name ?? '');
@@ -166,11 +175,15 @@ const onRemoveLabel = label => {
 const onMarkAsUnread = () => {
   closeContextMenu();
   store.dispatch('markMessagesUnread', { id: props.conversation.id });
+  emit('markUnread', props.conversation.id);
 };
 
 const onMarkAsRead = () => {
   closeContextMenu();
   store.dispatch('markMessagesRead', { id: props.conversation.id });
+  // Mantém o unread_count local do board zerado imediatamente (o store não
+  // toca nas cards locais do board).
+  emit('markRead', props.conversation.id);
 };
 
 const onDeleteConversation = () => {
@@ -214,6 +227,7 @@ const onKeydown = e => {
       <span class="text-sm font-medium truncate text-n-slate-12 flex-1">
         {{ contactName }}
       </span>
+      <UnreadBadge v-if="hasUnread" :count="unreadCount" />
       <span
         v-if="isScheduled"
         v-tooltip.top="t('PIPELINES.BOARD.CARD.SCHEDULED')"
@@ -224,7 +238,8 @@ const onKeydown = e => {
     </div>
     <p
       v-if="lastMessage"
-      class="text-xs text-n-slate-11 line-clamp-2 break-words"
+      class="text-xs line-clamp-2 break-words"
+      :class="hasUnread ? 'font-medium text-n-slate-12' : 'text-n-slate-11'"
     >
       {{ lastMessage }}
     </p>

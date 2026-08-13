@@ -27,6 +27,8 @@ const emit = defineEmits([
   'drop',
   'open-card',
   'open-conversation',
+  'mark-read',
+  'mark-unread',
   'load-more',
 ]);
 
@@ -95,6 +97,8 @@ const onDragOver = e => {
           :stage="stage"
           @open="conv => emit('open-card', conv)"
           @open-conversation="conv => emit('open-conversation', conv)"
+          @mark-read="conversationId => emit('mark-read', conversationId)"
+          @mark-unread="conversationId => emit('mark-unread', conversationId)"
         />
         <div
           v-if="conversations.length === 0 && !loading"

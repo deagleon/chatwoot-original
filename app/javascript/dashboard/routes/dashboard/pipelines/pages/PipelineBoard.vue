@@ -218,6 +218,17 @@ const activateChat = async data => {
   await store.dispatch('setActiveChat', { data });
 };
 
+const onCardMarkRead = conversationId => {
+  const stage = stages.value.find(s =>
+    conversationsByStage[s.id]?.some(c => c.id === conversationId)
+  );
+  if (!stage) return;
+  const list = conversationsByStage[stage.id];
+  const idx = list.findIndex(c => c.id === conversationId);
+  if (idx === -1) return;
+  list[idx] = { ...list[idx], unread_count: 0 };
+};
+
 const openConversationInPanel = async conversation => {
   conversationPreviewRequest += 1;
   const requestId = conversationPreviewRequest;
@@ -235,6 +246,10 @@ const openConversationInPanel = async conversation => {
     store.commit(types.SET_ALL_CONVERSATION, [conversation]);
     await activateChat(conversation);
   }
+  // Abrir o preview = ler a conversa: zera o badge no card e atualiza o
+  // agent_last_seen_at no backend.
+  store.dispatch('markMessagesRead', { id: conversation.id });
+  onCardMarkRead(conversation.id);
   previewDialogRef.value?.open();
 };
 
@@ -285,14 +300,63 @@ const onConversationUpdated = data => {
   }
 };
 
+// Real-time: react to message.created events from ActionCable and keep the
+// card's unread state and preview fresh without refetching the column.
+const onMessageCreated = data => {
+  const conversationId = data.conversation_id;
+  const stage = stages.value.find(s =>
+    conversationsByStage[s.id]?.some(c => c.id === conversationId)
+  );
+  if (!stage) return;
+  const list = conversationsByStage[stage.id];
+  const idx = list.findIndex(c => c.id === conversationId);
+  if (idx === -1) return;
+  const card = list[idx];
+  list[idx] = {
+    ...card,
+    unread_count: data.conversation?.unread_count ?? card.unread_count,
+    last_activity_at:
+      data.conversation?.last_activity_at ?? card.last_activity_at,
+    ...(data.content ? { messages: [data] } : {}),
+  };
+};
+
+const onCardMarkUnread = async conversationId => {
+  try {
+    // O endpoint de unread responde sem payload; o show devolve o
+    // unread_count recalculado após a marcação.
+    const { data } = await ConversationAPI.show(conversationId);
+    const stage = stages.value.find(s =>
+      conversationsByStage[s.id]?.some(c => c.id === conversationId)
+    );
+    if (!stage) return;
+    const list = conversationsByStage[stage.id];
+    const idx = list.findIndex(c => c.id === conversationId);
+    if (idx === -1) return;
+    list[idx] = { ...list[idx], unread_count: data.unread_count ?? 1 };
+  } catch {
+    // ignora — o badge fica como está até o próximo evento
+  }
+};
+
+const closePreview = () => {
+  selectedConversation.value = null;
+  // Sem isso, a conversa continua "selecionada" no store e o
+  // DashboardAudioNotificationHelper silencia os sons das mensagens novas
+  // dela enquanto o board está aberto.
+  store.dispatch('clearSelectedState');
+};
+
 onMounted(async () => {
   await fetchPipeline();
   fetchAllColumns();
   emitter.on(BUS_EVENTS.CONVERSATION_UPDATED, onConversationUpdated);
+  emitter.on(BUS_EVENTS.MESSAGE_CREATED, onMessageCreated);
 });
 
 onBeforeUnmount(() => {
   emitter.off(BUS_EVENTS.CONVERSATION_UPDATED, onConversationUpdated);
+  emitter.off(BUS_EVENTS.MESSAGE_CREATED, onMessageCreated);
   clearTimeout(searchDebounce);
 });
 
@@ -374,6 +438,8 @@ watch(
         @drop="handleDrop"
         @open-card="openCard"
         @open-conversation="openConversationInPanel"
+        @mark-read="onCardMarkRead"
+        @mark-unread="onCardMarkUnread"
         @load-more="loadMore"
       />
     </div>
@@ -386,7 +452,7 @@ watch(
       width="3xl"
       :show-cancel-button="false"
       :show-confirm-button="false"
-      @close="selectedConversation = null"
+      @close="closePreview"
     >
       <!-- Modal com altura que acomoda o conteúdo típico (header + mensagens +
            composer) e cresce até 80vh para conversas longas. O flex-1 + h-full

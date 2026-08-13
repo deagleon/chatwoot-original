@@ -29,7 +29,11 @@ const { mockStoreDispatch, mockStoreCommit } = vi.hoisted(() => ({
 }));
 
 vi.mock('dashboard/composables/store', () => ({
-  useStore: () => ({ dispatch: mockStoreDispatch, commit: mockStoreCommit }),
+  useStore: () => ({
+    state: { conversations: { allConversations: [] } },
+    dispatch: mockStoreDispatch,
+    commit: mockStoreCommit,
+  }),
   useMapGetter: getter => {
     if (getter === 'inboxes/getInboxes') return ref([]);
     if (getter === 'agents/getAgents') return ref([]);

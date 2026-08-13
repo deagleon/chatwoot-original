@@ -134,6 +134,7 @@ class ActionCableConnector extends BaseActionCableConnector {
       conversation_id: conversationId,
     } = data;
     DashboardAudioNotificationHelper.onNewMessage(data);
+    emitter.emit(BUS_EVENTS.MESSAGE_CREATED, data);
     this.app.$store.dispatch('addMessage', data);
     this.app.$store.dispatch('updateConversationLastActivity', {
       lastActivityAt,
