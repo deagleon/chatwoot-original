@@ -6,6 +6,10 @@ class Conversations::StageFilterService < Conversations::FilterService
 
   def perform
     @conversations = base_relation.where(pipeline_stage_id: @stage.id)
+    apply_inbox_filter
+    apply_assignee_filter
+    apply_label_filter
+    apply_status_filter
     apply_search_query if @params[:q].present?
 
     {
@@ -15,6 +19,26 @@ class Conversations::StageFilterService < Conversations::FilterService
   end
 
   private
+
+  def apply_inbox_filter
+    inbox_ids = Array(@params[:inbox_ids]).map(&:to_i).reject(&:zero?)
+    @conversations = @conversations.where(inbox_id: inbox_ids) if inbox_ids.present?
+  end
+
+  def apply_assignee_filter
+    assignee_id = @params[:assignee_id].to_i
+    @conversations = @conversations.where(assignee_id: assignee_id) if assignee_id.positive?
+  end
+
+  def apply_label_filter
+    label = @params[:label].to_s
+    @conversations = @conversations.tagged_with(label) if label.present?
+  end
+
+  def apply_status_filter
+    statuses = Array(@params[:status]).map(&:to_s).reject(&:blank?)
+    @conversations = @conversations.where(status: statuses) if statuses.present?
+  end
 
   def apply_search_query
     search = "%#{@params[:q]}%"
