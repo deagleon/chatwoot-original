@@ -195,6 +195,29 @@ const handleDrop = async ({ stageId, conversationId }) => {
 //
 // getConversation só atualiza conversas já na lista do store; a conversa do
 // board não está lá — então buscamos via API e adicionamos + selecionamos.
+//
+// O endpoint show (assim como a lista) só devolve a última mensagem no payload.
+// setActiveChat dispara o fetch do histórico completo (fetchPreviousMessages) a
+// partir da última mensagem e marca dataFetched para o MessagesView renderizar.
+const activateChat = async data => {
+  const existingChat = store.state.conversations.allConversations.find(
+    c => c.id === data.id
+  );
+  // Reabrir a mesma conversa preserva o histórico completo no store
+  // (SET_ALL_CONVERSATION mantém messages/dataFetched do chat selecionado);
+  // pular o re-fetch aqui evita duplicar as mensagens na timeline.
+  if (existingChat?.dataFetched) {
+    store.commit(types.SET_CURRENT_CHAT_WINDOW, { id: data.id });
+    return;
+  }
+  if ((data.messages || []).length === 0) {
+    store.commit(types.SET_CURRENT_CHAT_WINDOW, { id: data.id });
+    store.commit(types.SET_CHAT_DATA_FETCHED, data.id);
+    return;
+  }
+  await store.dispatch('setActiveChat', { data });
+};
+
 const openConversationInPanel = async conversation => {
   conversationPreviewRequest += 1;
   const requestId = conversationPreviewRequest;
@@ -205,12 +228,12 @@ const openConversationInPanel = async conversation => {
     // resposta do request mais recente pode escrever no store/abrir o modal.
     if (requestId !== conversationPreviewRequest) return;
     store.commit(types.SET_ALL_CONVERSATION, [data]);
-    store.commit(types.SET_CURRENT_CHAT_WINDOW, { id: data.id });
+    await activateChat(data);
   } catch {
     if (requestId !== conversationPreviewRequest) return;
-    // Fallback: o payload do board já carrega a conversa (mensagens inclusas).
+    // Fallback: o payload do board já carrega a conversa (última mensagem inclusa).
     store.commit(types.SET_ALL_CONVERSATION, [conversation]);
-    store.commit(types.SET_CURRENT_CHAT_WINDOW, { id: conversation.id });
+    await activateChat(conversation);
   }
   previewDialogRef.value?.open();
 };
