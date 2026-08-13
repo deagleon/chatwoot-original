@@ -65,7 +65,7 @@ module Llm::Config
       api_key = system_api_key
       endpoint = openai_endpoint&.chomp('/')
       config.openai_api_key = api_key if api_key.present?
-      config.openai_api_base = endpoint if endpoint.present?
+      config.openai_api_base = "#{endpoint}/v1" if endpoint.present?
       config.openrouter_api_key = api_key if api_key.present?
       config.openrouter_api_base = "#{endpoint}/v1" if endpoint.present?
     end
