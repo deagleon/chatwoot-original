@@ -38,13 +38,15 @@ const uiFlags = useMapGetter('integrations/getUIFlags');
 const inboxes = useMapGetter('inboxes/getInboxes');
 
 // WhatsApp pode chegar como Channel::Whatsapp (Cloud API) ou como
-// Channel::TwilioSms com medium whatsapp (Twilio) — mesma detecção do resto do app.
+// Channel::TwilioSms — via medium whatsapp ou, em registros legados, pelo
+// prefixo "whatsapp:" no phone_number. Mesma detecção usada no resto do app.
 const whatsappInboxes = computed(() =>
   inboxes.value.filter(
     inbox =>
       inbox.channel_type === INBOX_TYPES.WHATSAPP ||
       (inbox.channel_type === INBOX_TYPES.TWILIO &&
-        inbox.medium === TWILIO_CHANNEL_MEDIUM.WHATSAPP)
+        (inbox.medium === TWILIO_CHANNEL_MEDIUM.WHATSAPP ||
+          String(inbox.phone_number || '').startsWith('whatsapp')))
   )
 );
 

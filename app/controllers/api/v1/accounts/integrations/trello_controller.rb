@@ -114,9 +114,14 @@ class Api::V1::Accounts::Integrations::TrelloController < Api::V1::Accounts::Int
     @whatsapp_inbox ||= Current.account.inboxes.find_by(id: params[:whatsapp_inbox_id])
     return if @whatsapp_inbox.blank?
 
-    # WhatsApp pode chegar como Channel::Whatsapp (Cloud API) ou como
-    # Channel::TwilioSms com medium whatsapp (Twilio) — igual ao resto do app.
-    @whatsapp_inbox if @whatsapp_inbox.whatsapp? || @whatsapp_inbox.twilio_whatsapp?
+    @whatsapp_inbox if valid_whatsapp_inbox?(@whatsapp_inbox)
+  end
+
+  def valid_whatsapp_inbox?(inbox)
+    inbox.whatsapp? || inbox.twilio_whatsapp? ||
+      # Registros legados de Twilio-WhatsApp podem ter medium sem o valor
+      # esperado; o phone_number "whatsapp:+..." é o sinal mais confiável neles.
+      (inbox.twilio? && inbox.channel.phone_number.to_s.starts_with?('whatsapp'))
   end
 
   def register_remote_webhook
