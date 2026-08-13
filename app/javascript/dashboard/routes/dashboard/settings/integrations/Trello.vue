@@ -37,13 +37,15 @@ const integration = useFunctionGetter('integrations/getIntegration', 'trello');
 const uiFlags = useMapGetter('integrations/getUIFlags');
 const inboxes = useMapGetter('inboxes/getInboxes');
 
-// WhatsApp pode chegar como Channel::Whatsapp (Cloud API) ou como
+// WhatsApp pode chegar como Channel::Whatsapp (Cloud API), como
+// Channel::Api (integrações externas tipo Evolution API) ou como
 // Channel::TwilioSms — via medium whatsapp ou, em registros legados, pelo
 // prefixo "whatsapp:" no phone_number. Mesma detecção usada no resto do app.
 const whatsappInboxes = computed(() =>
   inboxes.value.filter(
     inbox =>
       inbox.channel_type === INBOX_TYPES.WHATSAPP ||
+      inbox.channel_type === INBOX_TYPES.API ||
       (inbox.channel_type === INBOX_TYPES.TWILIO &&
         (inbox.medium === TWILIO_CHANNEL_MEDIUM.WHATSAPP ||
           String(inbox.phone_number || '').startsWith('whatsapp')))

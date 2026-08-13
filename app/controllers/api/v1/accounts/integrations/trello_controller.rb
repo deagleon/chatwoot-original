@@ -118,7 +118,7 @@ class Api::V1::Accounts::Integrations::TrelloController < Api::V1::Accounts::Int
   end
 
   def valid_whatsapp_inbox?(inbox)
-    inbox.whatsapp? || inbox.twilio_whatsapp? ||
+    inbox.whatsapp? || inbox.api? || inbox.twilio_whatsapp? ||
       # Registros legados de Twilio-WhatsApp podem ter medium sem o valor
       # esperado; o phone_number "whatsapp:+..." é o sinal mais confiável neles.
       (inbox.twilio? && inbox.channel.phone_number.to_s.starts_with?('whatsapp'))
