@@ -99,6 +99,7 @@ export const getActionOptions = ({
   teams,
   labels,
   slaPolicies,
+  pipelines,
   type,
   addNoneToListFn,
   priorityOptions,
@@ -111,6 +112,7 @@ export const getActionOptions = ({
     remove_label: generateConditionOptions(labels, 'title'),
     change_priority: priorityOptions,
     add_sla: slaPolicies,
+    move_to_stage: pipelines,
   };
   return actionsMap[type];
 };
@@ -343,6 +345,8 @@ export const getCustomAttributeType = (automationTypes, automation, key) => {
 export const showActionInput = (automationActionTypes, action) => {
   if (action === 'send_email_to_team' || action === 'send_message')
     return false;
-  const type = automationActionTypes.find(i => i.key === action).inputType;
+  // Tipos filtrados por feature flag (ex.: move_to_stage/add_sla com a flag
+  // desligada) não existem na lista — não quebrar a edição da regra.
+  const type = automationActionTypes.find(i => i.key === action)?.inputType;
   return !!type;
 };

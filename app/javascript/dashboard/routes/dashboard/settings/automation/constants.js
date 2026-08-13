@@ -805,6 +805,11 @@ export const AUTOMATION_ACTION_TYPES = [
     label: 'ADD_SLA',
     inputType: 'search_select',
   },
+  {
+    key: 'move_to_stage',
+    label: 'MOVE_TO_STAGE',
+    inputType: 'pipeline_stage',
+  },
 ];
 
 export const DEFAULT_DELAY_MINUTES = 240; // 4 hours

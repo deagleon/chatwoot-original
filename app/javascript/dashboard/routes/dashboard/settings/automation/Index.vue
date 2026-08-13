@@ -113,6 +113,13 @@ const isSLAEnabled = computed(() =>
   getters['accounts/isFeatureEnabledonAccount'].value(accountId.value, 'sla')
 );
 
+const isPipelinesEnabled = computed(() =>
+  getters['accounts/isFeatureEnabledonAccount'].value(
+    accountId.value,
+    'pipeline'
+  )
+);
+
 const showDelayDisabledBanner = computed(
   () =>
     !isDelayedAutomationsEnabled.value &&
@@ -129,6 +136,9 @@ onMounted(() => {
   store.dispatch('automations/get');
   if (isSLAEnabled.value) {
     store.dispatch('sla/get');
+  }
+  if (isPipelinesEnabled.value) {
+    store.dispatch('pipelines/get');
   }
 });
 

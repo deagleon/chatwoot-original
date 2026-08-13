@@ -132,6 +132,13 @@ const validateSingleAction = action => {
   ];
 
   if (
+    action.action_name === 'move_to_stage' &&
+    !action.action_params?.stage_id
+  ) {
+    return ACTION_PARAMETERS_REQUIRED;
+  }
+
+  if (
     !noParamActions.includes(action.action_name) &&
     (!action.action_params || action.action_params.length === 0)
   ) {

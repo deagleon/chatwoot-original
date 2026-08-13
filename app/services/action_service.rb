@@ -73,6 +73,19 @@ class ActionService
     @conversation.with_lock { @conversation.update!(team_id: team_ids[0]) }
   end
 
+  def move_to_stage(params)
+    return unless @account.feature_enabled?('pipeline')
+
+    action_params = params.first
+    return if action_params.blank?
+
+    stage = @account.pipeline_stages.find_by(id: action_params[:stage_id], pipeline_id: action_params[:pipeline_id])
+    return if stage.blank? || @conversation.pipeline_stage_id == stage.id
+
+    @conversation.move_to_stage!(stage)
+    Integrations::Trello::MoveCardJob.perform_later(@conversation.id) if @conversation.trello_card_id.present?
+  end
+
   def remove_assigned_agent(_params)
     @conversation.with_lock { @conversation.update!(assignee_id: nil) }
   end

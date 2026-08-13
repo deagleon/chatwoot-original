@@ -222,9 +222,13 @@ const hasAutomationMutated = computed(() => {
 });
 
 const automationActionTypes = computed(() => {
-  const actionTypes = isCloudFeatureEnabled('sla')
+  let actionTypes = isCloudFeatureEnabled('sla')
     ? AUTOMATION_ACTION_TYPES
     : AUTOMATION_ACTION_TYPES.filter(({ key }) => key !== 'add_sla');
+
+  if (!isCloudFeatureEnabled(FEATURE_FLAGS.PIPELINES)) {
+    actionTypes = actionTypes.filter(({ key }) => key !== 'move_to_stage');
+  }
 
   return actionTypes.map(action => ({
     ...action,

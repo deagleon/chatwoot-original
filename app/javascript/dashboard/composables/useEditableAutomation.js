@@ -98,6 +98,9 @@ export function useEditableAutomation() {
         message: params[0].message,
       };
     }
+    if (inputType === 'pipeline_stage') {
+      return params[0];
+    }
     return [...params];
   };
 
