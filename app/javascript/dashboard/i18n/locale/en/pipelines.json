@@ -23,6 +23,17 @@
         "PLACEHOLDER": "Enter pipeline name",
         "ERROR": "Name is required"
       },
+      "STAGES": {
+        "LABEL": "Columns",
+        "ADD": "Add column",
+        "NAME_PLACEHOLDER": "Column name",
+        "REMOVE": "Remove column",
+        "MOVE_UP": "Move up",
+        "MOVE_DOWN": "Move down",
+        "EMPTY_HINT": "Add at least one column",
+        "NAME_REQUIRED": "Every column needs a name",
+        "CONVERSATIONS_BLOCK": "This column has conversations and cannot be removed"
+      },
       "SUBMIT": "Create",
       "UPDATE": "Save",
       "CANCEL": "Cancel",

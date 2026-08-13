@@ -24,7 +24,7 @@ class Pipeline < ApplicationRecord
 
   belongs_to :account
   has_many :pipeline_stages, dependent: :destroy_async
-  accepts_nested_attributes_for :pipeline_stages
+  accepts_nested_attributes_for :pipeline_stages, allow_destroy: true
 
   validates :name, presence: true
 

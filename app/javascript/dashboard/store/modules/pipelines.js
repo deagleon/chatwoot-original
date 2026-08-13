@@ -41,8 +41,6 @@ export const actions = {
     try {
       const response = await PipelinesAPI.create(pipelineObj);
       commit(types.ADD_PIPELINE, response.data);
-    } catch (error) {
-      throw new Error(error);
     } finally {
       commit(types.SET_PIPELINES_UI_FLAG, { isCreating: false });
     }
@@ -52,8 +50,6 @@ export const actions = {
     try {
       const response = await PipelinesAPI.update(id, updateObj);
       commit(types.EDIT_PIPELINE, response.data);
-    } catch (error) {
-      throw new Error(error);
     } finally {
       commit(types.SET_PIPELINES_UI_FLAG, { isUpdating: false });
     }

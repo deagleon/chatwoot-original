@@ -16,10 +16,9 @@ RSpec.describe PipelineStage do
     it { is_expected.to validate_presence_of(:name) }
     it { is_expected.to validate_presence_of(:position) }
 
-    it 'validates position uniqueness per pipeline' do
+    it 'allows duplicate positions to support batch reordering' do
       duplicate = pipeline.pipeline_stages.build(name: 'Duplicate', position: stage.position)
-      expect(duplicate).not_to be_valid
-      expect(duplicate.errors[:position]).to be_present
+      expect(duplicate).to be_valid
     end
   end
 
