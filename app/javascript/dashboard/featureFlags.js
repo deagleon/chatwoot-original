@@ -37,6 +37,7 @@ export const FEATURE_FLAGS = {
   INBOUND_EMAILS: 'inbound_emails',
   IP_LOOKUP: 'ip_lookup',
   LINEAR: 'linear_integration',
+  TRELLO: 'trello_integration',
   CAPTAIN: 'captain_integration',
   CUSTOM_ROLES: 'custom_roles',
   CHATWOOT_V4: 'chatwoot_v4',
@@ -60,8 +61,6 @@ export const FEATURE_FLAGS = {
 
 export const PREMIUM_FEATURES = [
   FEATURE_FLAGS.SLA,
-  FEATURE_FLAGS.CAPTAIN,
-  FEATURE_FLAGS.CAPTAIN_CUSTOM_TOOLS,
   FEATURE_FLAGS.CUSTOM_ROLES,
   FEATURE_FLAGS.AUDIT_LOGS,
   FEATURE_FLAGS.HELP_CENTER,

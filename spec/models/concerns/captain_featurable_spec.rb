@@ -91,6 +91,9 @@ RSpec.describe CaptainFeaturable do
 
     context 'when captain_models is nil' do
       before do
+        # Captain V2 is enabled by default for new accounts; disable it so the
+        # assistant feature falls back to the configured default model.
+        account.disable_features!('captain_integration_v2')
         account.update!(captain_models: nil)
       end
 

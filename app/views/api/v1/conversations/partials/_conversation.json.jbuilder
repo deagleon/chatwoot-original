@@ -59,6 +59,7 @@ json.last_activity_at conversation.last_activity_at.to_i
 json.priority conversation.priority
 json.pipeline_stage_id conversation.pipeline_stage_id
 json.pipeline_stage_changed_at conversation.pipeline_stage_changed_at
+json.trello_card_id conversation.trello_card_id
 # Populado apenas quando a query seleciona o alias (ex.: board com scope/select) — sino em A4.
 json.pending_scheduled_message_count conversation.pending_scheduled_message_count if conversation.respond_to?(:pending_scheduled_message_count)
  json.waiting_since conversation.waiting_since.to_i.to_i

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_08_08_124647) do
+ActiveRecord::Schema[7.1].define(version: 2026_08_13_000000) do
   # These extensions should be enabled to support this database
   enable_extension "pg_stat_statements"
   enable_extension "pg_trgm"
@@ -852,9 +852,11 @@ ActiveRecord::Schema[7.1].define(version: 2026_08_08_124647) do
     t.datetime "status_changed_at"
     t.bigint "pipeline_stage_id"
     t.datetime "pipeline_stage_changed_at"
+    t.string "trello_card_id"
     t.index ["account_id", "display_id"], name: "index_conversations_on_account_id_and_display_id", unique: true
     t.index ["account_id", "id"], name: "index_conversations_on_id_and_account_id"
     t.index ["account_id", "inbox_id", "status", "assignee_id"], name: "conv_acid_inbid_stat_asgnid_idx"
+    t.index ["account_id", "trello_card_id"], name: "index_conversations_on_account_id_and_trello_card_id", unique: true, where: "(trello_card_id IS NOT NULL)"
     t.index ["account_id"], name: "index_conversations_on_account_id"
     t.index ["assignee_id", "account_id"], name: "index_conversations_on_assignee_id_and_account_id"
     t.index ["campaign_id"], name: "index_conversations_on_campaign_id"
@@ -1299,7 +1301,9 @@ ActiveRecord::Schema[7.1].define(version: 2026_08_08_124647) do
     t.integer "position", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "trello_list_id"
     t.index ["pipeline_id", "position"], name: "index_pipeline_stages_on_pipeline_id_and_position", unique: true
+    t.index ["pipeline_id", "trello_list_id"], name: "index_pipeline_stages_on_pipeline_id_and_trello_list_id", unique: true, where: "(trello_list_id IS NOT NULL)"
     t.index ["pipeline_id"], name: "index_pipeline_stages_on_pipeline_id"
   end
 
@@ -1309,6 +1313,8 @@ ActiveRecord::Schema[7.1].define(version: 2026_08_08_124647) do
     t.datetime "archived_at"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "trello_board_id"
+    t.index ["account_id", "trello_board_id"], name: "index_pipelines_on_account_id_and_trello_board_id", unique: true, where: "(trello_board_id IS NOT NULL)"
     t.index ["account_id"], name: "index_pipelines_on_account_id"
     t.index ["archived_at"], name: "index_pipelines_on_archived_at"
   end

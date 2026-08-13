@@ -285,7 +285,7 @@ watch(
 </script>
 
 <template>
-  <div class="flex flex-col h-full min-h-0">
+  <div class="flex flex-col w-full h-full min-h-0 min-w-0">
     <!-- Filter bar — usa os componentes do design system (ComboBox single,
          TagMultiSelectComboBox multi) em vez de <select> nativos: visual
          consistente com a lista de conversas e a página de conversa. -->
@@ -374,7 +374,7 @@ watch(
           class="h-full flex-1 min-h-0 flex flex-col"
           :is-contact-panel-open="false"
           :is-on-expanded-layout="false"
-          is-inbox-view
+          :is-inbox-view
         />
       </div>
     </Dialog>

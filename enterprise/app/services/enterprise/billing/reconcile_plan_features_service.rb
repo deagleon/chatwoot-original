@@ -12,8 +12,6 @@ class Enterprise::Billing::ReconcilePlanFeaturesService
     channel_email
     channel_instagram
     channel_tiktok
-    captain_integration
-    captain_document_auto_sync
     advanced_search_indexing
     advanced_search
     linear_integration
@@ -28,7 +26,6 @@ class Enterprise::Billing::ReconcilePlanFeaturesService
     csat_review_notes
     conversation_required_attributes
     advanced_assignment
-    custom_tools
     companies
   ].freeze
   ENTERPRISE_PLAN_FEATURES = %w[audit_logs disable_branding saml].freeze
@@ -39,6 +36,7 @@ class Enterprise::Billing::ReconcilePlanFeaturesService
   def perform
     account.disable_features(*PREMIUM_PLAN_FEATURES)
     account.disable_features('captain_integration_v2')
+    account.enable_features('captain_integration', 'captain_document_auto_sync', 'custom_tools')
     account.enable_features(*current_plan_features)
     account.enable_features('captain_integration_v2') if captain_v2_default_eligible?
     account.enable_features(*manually_managed_features)
@@ -75,6 +73,6 @@ class Enterprise::Billing::ReconcilePlanFeaturesService
   end
 
   def captain_v2_default_eligible?
-    !default_plan? && account.internal_attributes[Enterprise::Account::CAPTAIN_V2_DEFAULT_ELIGIBLE] != false
+    account.internal_attributes[Enterprise::Account::CAPTAIN_V2_DEFAULT_ELIGIBLE] != false
   end
 end

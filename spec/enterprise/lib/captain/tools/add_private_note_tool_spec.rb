@@ -130,6 +130,8 @@ RSpec.describe Captain::Tools::AddPrivateNoteTool, type: :model do
     end
 
     it 'keeps legacy public-tool side effects for Captain V1' do
+      account.disable_features!(:captain_integration_v2)
+
       expect do
         result = tool.execute(tool_context, note: 'Keep the legacy side effect')
         expect(result).to eq('Private note added successfully')

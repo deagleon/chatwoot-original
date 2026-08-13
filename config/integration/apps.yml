@@ -328,3 +328,28 @@ leadsquared:
       'conversation_activity_score',
       'transcript_activity_score',
     ]
+
+trello:
+  id: trello
+  feature_flag: trello_integration
+  logo: trello.png
+  i18n_key: trello
+  hook_type: account
+  allow_multiple_hooks: true
+  settings_json_schema:
+    {
+      'type': 'object',
+      'properties':
+        {
+          'api_key': { 'type': 'string' },
+          'board_id': { 'type': 'string' },
+          'board_name': { 'type': 'string' },
+          'webhook_secret': { 'type': 'string' },
+          'webhook_id': { 'type': 'string' },
+          'member_id': { 'type': 'string' },
+          'whatsapp_inbox_id': { 'type': 'string' },
+        },
+      'required': ['api_key', 'board_id', 'whatsapp_inbox_id'],
+      'additionalProperties': false,
+    }
+  visible_properties: ['board_id', 'board_name', 'whatsapp_inbox_id']

@@ -490,6 +490,7 @@ export default {
           v-for="pipeline in moveToPipelineConfig.options"
           :key="pipeline.key"
           :option="pipeline"
+          :scrollable="false"
         >
           <MenuItem
             v-for="stage in pipeline.options"

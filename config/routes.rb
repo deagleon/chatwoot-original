@@ -426,6 +426,13 @@ Rails.application.routes.draw do
                 delete :destroy
               end
             end
+            resource :trello, controller: 'trello', only: [] do
+              collection do
+                post :boards
+                post :create
+                delete :destroy
+              end
+            end
           end
           resources :portals do
             member do
@@ -664,6 +671,7 @@ Rails.application.routes.draw do
   post 'webhooks/twitter', to: 'api/v1/webhooks#twitter_events'
   post 'webhooks/line/:line_channel_id', to: 'webhooks/line#process_payload'
   post 'webhooks/telegram/:bot_token', to: 'webhooks/telegram#process_payload'
+  match 'webhooks/trello/:webhook_secret', to: 'webhooks/trello#process_payload', via: %i[head post]
   post 'webhooks/sms/:phone_number', to: 'webhooks/sms#process_payload'
   get 'webhooks/whatsapp/:phone_number', to: 'webhooks/whatsapp#verify'
   post 'webhooks/whatsapp/:phone_number', to: 'webhooks/whatsapp#process_payload'

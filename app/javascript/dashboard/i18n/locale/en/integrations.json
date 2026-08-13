@@ -394,6 +394,50 @@
         "CONFIRM": "Yes, delete",
         "CANCEL": "Cancel"
       }
+    },
+    "TRELLO": {
+      "HEADER": "Trello",
+      "CONNECTED_BOARDS": {
+        "TITLE": "Connected boards",
+        "EMPTY": "No boards connected yet.",
+        "INBOX_LABEL": "WhatsApp inbox: {inboxName}"
+      },
+      "DISCONNECT": {
+        "BUTTON": "Disconnect",
+        "CANCEL": "Cancel",
+        "CONFIRM": {
+          "TITLE": "Disconnect Trello board",
+          "MESSAGE": "Are you sure you want to disconnect this Trello board? The pipeline and its conversations will be kept, but the board link will be removed."
+        },
+        "SUCCESS": "Trello board disconnected successfully.",
+        "ERROR": "There was an error disconnecting the Trello board, please try again."
+      },
+      "CONNECT_FORM": {
+        "TITLE": "Connect a Trello board",
+        "API_KEY": {
+          "LABEL": "Trello API key",
+          "PLACEHOLDER": "Enter your Trello API key"
+        },
+        "TOKEN": {
+          "LABEL": "Trello token",
+          "PLACEHOLDER": "Enter your Trello token"
+        },
+        "LOAD_BOARDS": "Load boards",
+        "BOARD": {
+          "LABEL": "Board",
+          "PLACEHOLDER": "Select a board"
+        },
+        "CONNECT": "Connect",
+        "WHATSAPP_INBOX": {
+          "LABEL": "WhatsApp inbox",
+          "PLACEHOLDER": "Select the WhatsApp inbox for new conversations"
+        }
+      },
+      "LOAD_BOARDS_ERROR": "There was an error fetching the Trello boards, please check your API key and token and try again.",
+      "CONNECT": {
+        "SUCCESS": "Trello board connected successfully.",
+        "ERROR": "There was an error connecting the Trello board, please try again."
+      }
     }
   },
   "CAPTAIN": {
@@ -986,7 +1030,6 @@
         "SUCCESS_MESSAGE": "The document has been successfully deleted",
         "ERROR_MESSAGE": "There was an error deleting the document, please try again."
       },
-
       "OPTIONS": {
         "VIEW_DETAILS": "View details",
         "SYNC_NOW": "Refresh now",

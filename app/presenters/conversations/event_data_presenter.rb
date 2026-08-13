@@ -17,6 +17,8 @@ class Conversations::EventDataPresenter < SimpleDelegator
       first_reply_created_at: first_reply_created_at,
       priority: priority,
       waiting_since: waiting_since.to_i,
+      pipeline_stage_id: pipeline_stage_id,
+      trello_card_id: trello_card_id,
       **push_timestamps
     }
   end

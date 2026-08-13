@@ -4,7 +4,6 @@ import { useRouter, useRoute } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { OnClickOutside } from '@vueuse/components';
 import { useStore, useMapGetter } from 'dashboard/composables/store.js';
-import { useConfig } from 'dashboard/composables/useConfig';
 import { debounce } from '@chatwoot/utils';
 import {
   ARTICLE_TABS,
@@ -83,15 +82,11 @@ const searchQuery = ref(route.query.search || '');
 
 const debouncedSearch = debounce(() => emit('search', searchQuery.value), 500);
 
-const { isEnterprise } = useConfig();
-
-const isTranslationAvailable = computed(
-  () =>
-    isEnterprise &&
-    isFeatureEnabledonAccount.value(
-      currentAccountId.value,
-      FEATURE_FLAGS.CAPTAIN_TASKS
-    )
+const isTranslationAvailable = computed(() =>
+  isFeatureEnabledonAccount.value(
+    currentAccountId.value,
+    FEATURE_FLAGS.CAPTAIN_TASKS
+  )
 );
 
 const allItems = computed(() => props.articles.map(a => ({ id: a.id })));

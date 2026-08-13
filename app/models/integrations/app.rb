@@ -57,13 +57,15 @@ class Integrations::App
     when 'slack'
       GlobalConfigService.load('SLACK_CLIENT_SECRET', nil).present?
     when 'linear'
-      account.feature_enabled?('linear_integration') && GlobalConfigService.load('LINEAR_CLIENT_ID', nil).present?
+      linear_enabled?(account)
     when 'shopify'
       shopify_enabled?(account)
     when 'leadsquared'
       account.feature_enabled?('crm_integration')
     when 'notion'
       notion_enabled?(account)
+    when 'trello'
+      account.feature_enabled?('trello_integration')
     else
       true
     end
@@ -125,6 +127,10 @@ class Integrations::App
 
   def shopify_enabled?(account)
     account.feature_enabled?('shopify_integration') && GlobalConfigService.load('SHOPIFY_CLIENT_ID', nil).present?
+  end
+
+  def linear_enabled?(account)
+    account.feature_enabled?('linear_integration') && GlobalConfigService.load('LINEAR_CLIENT_ID', nil).present?
   end
 
   def notion_enabled?(account)

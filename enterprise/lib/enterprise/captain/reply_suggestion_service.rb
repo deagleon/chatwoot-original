@@ -8,7 +8,7 @@ module Enterprise::Captain::ReplySuggestionService
   private
 
   def use_search_tool?
-    ChatwootApp.chatwoot_cloud? || ChatwootApp.self_hosted_enterprise?
+    account.feature_enabled?('captain_integration')
   end
 
   def prompt_variables
