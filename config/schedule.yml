@@ -32,6 +32,12 @@ scheduled_messages_trigger_due_job:
   class: 'ScheduledMessages::TriggerDueJob'
   queue: scheduled_jobs
 
+# sweep de regras de limpeza diária de colunas de pipeline
+stage_cleanup_rules_trigger_due_job:
+  cron: '*/5 * * * *'
+  class: 'StageCleanupRules::TriggerDueJob'
+  queue: scheduled_jobs
+
 # executed daily at 2230 UTC
 # which is our lowest traffic time
 remove_stale_contact_inboxes_job.rb:

@@ -127,6 +127,7 @@ Rails.application.routes.draw do
           resources :automation_rules, only: [:index, :create, :show, :update, :destroy] do
             post :clone
           end
+          resources :automation_stage_cleanup_rules, only: [:index, :create, :update, :destroy]
           resources :macros, only: [:index, :create, :show, :update, :destroy] do
             post :execute, on: :member
           end

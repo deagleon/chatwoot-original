@@ -311,6 +311,15 @@ const onConversationUpdated = data => {
   const idx = list.findIndex(c => c.id === conversationId);
   if (idx === -1) return;
 
+  // Cleanup jobs remove the conversation from its stage (pipeline_stage_id
+  // becomes null): the card leaves the board instead of staying in place.
+  if (!newStageId) {
+    conversationsByStage[fromStage.id] = list.filter(
+      c => c.id !== conversationId
+    );
+    return;
+  }
+
   if (newStageId && newStageId !== fromStage.id) {
     conversationsByStage[fromStage.id] = list.filter(
       c => c.id !== conversationId

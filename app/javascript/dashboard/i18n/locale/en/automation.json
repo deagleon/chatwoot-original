@@ -235,6 +235,21 @@
       "TEAM_NAME": "Team",
       "PRIORITY": "Priority",
       "LABELS": "Labels"
+    },
+    "STAGE_CLEANUP": {
+      "TITLE": "Daily column cleanup",
+      "ADD": "Add cleanup",
+      "EMPTY": "No cleanup rules yet",
+      "COLUMN_LABEL": "Column",
+      "TIME_LABEL": "Daily time",
+      "ACTIVE": "Active",
+      "DELETE": "Delete",
+      "SAVE": "Add rule",
+      "SUCCESS": "Cleanup rule saved",
+      "DELETE_SUCCESS": "Cleanup rule removed",
+      "ERROR": "Failed to save cleanup rule",
+      "DELETE_ERROR": "Failed to remove cleanup rule",
+      "TIMEZONE_HINT": "Runs daily at this time in the account timezone"
     }
   }
 }

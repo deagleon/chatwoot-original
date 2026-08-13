@@ -17,6 +17,7 @@
 class PipelineStage < ApplicationRecord
   belongs_to :pipeline
   has_many :conversations, dependent: :restrict_with_error
+  has_many :stage_cleanup_rules, dependent: :destroy
 
   validates :name, presence: true
   # Position is a display-order hint; duplicate positions are tolerated during
