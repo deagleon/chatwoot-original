@@ -56,7 +56,8 @@
         "LABEL": "Label",
         "STATUS": "Status",
         "ALL_STATUSES": "All statuses",
-        "SEARCH_PLACEHOLDER": "Search conversations..."
+        "SEARCH_PLACEHOLDER": "Search conversations...",
+        "ALL_LABELS": "All labels"
       },
       "COLUMN": {
         "ADD_STAGE": "Add stage",

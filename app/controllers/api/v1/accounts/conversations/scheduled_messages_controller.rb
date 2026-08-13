@@ -34,12 +34,21 @@ class Api::V1::Accounts::Conversations::ScheduledMessagesController < Api::V1::A
     end
   end
 
+  # DELETE:
+  # - pending      -> cancela (mantém o registro no histórico)
+  # - cancelled/sent -> remove o registro do histórico (a mensagem enviada fica intacta)
+  # - demais       -> 409
   def destroy
     @scheduled_message.with_lock do
-      next render_conflict unless @scheduled_message.pending?
-
-      @scheduled_message.update!(status: :cancelled)
-      Rails.configuration.dispatcher.dispatch(SCHEDULED_MESSAGE_CANCELLED, Time.zone.now, scheduled_message: @scheduled_message)
+      if @scheduled_message.pending?
+        @scheduled_message.update!(status: :cancelled)
+        Rails.configuration.dispatcher.dispatch(SCHEDULED_MESSAGE_CANCELLED, Time.zone.now, scheduled_message: @scheduled_message)
+      elsif @scheduled_message.cancelled? || @scheduled_message.sent?
+        @scheduled_message.destroy!
+        Rails.configuration.dispatcher.dispatch(SCHEDULED_MESSAGE_CANCELLED, Time.zone.now, scheduled_message: @scheduled_message)
+      else
+        render_conflict
+      end
     end
   end
 

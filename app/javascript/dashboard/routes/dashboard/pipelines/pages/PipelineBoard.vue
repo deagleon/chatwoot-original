@@ -59,6 +59,9 @@ const filters = reactive({
 });
 
 let searchDebounce = null;
+// Contador de requests do preview: só a resposta do clique mais recente pode
+// escrever no store (evita overwrite por resposta antiga que chega atrasada).
+let conversationPreviewRequest = 0;
 
 const statusOptions = [
   { value: 'open', label: 'Open' },
@@ -70,12 +73,14 @@ const statusOptions = [
 const inboxOptions = computed(() =>
   (inboxes.value || []).map(i => ({ value: i.id, label: i.name }))
 );
-const assigneeOptions = computed(() =>
-  (agents.value || []).map(a => ({ value: a.id, label: a.name }))
-);
-const labelOptions = computed(() =>
-  (labels.value || []).map(l => ({ value: l.title, label: l.title }))
-);
+const assigneeOptions = computed(() => [
+  { value: null, label: t('PIPELINES.BOARD.FILTER.ALL_ASSIGNEES') },
+  ...(agents.value || []).map(a => ({ value: a.id, label: a.name })),
+]);
+const labelOptions = computed(() => [
+  { value: null, label: t('PIPELINES.BOARD.FILTER.ALL_LABELS') },
+  ...(labels.value || []).map(l => ({ value: l.title, label: l.title })),
+]);
 
 const buildParams = () => {
   const params = {};
@@ -191,12 +196,18 @@ const handleDrop = async ({ stageId, conversationId }) => {
 // getConversation só atualiza conversas já na lista do store; a conversa do
 // board não está lá — então buscamos via API e adicionamos + selecionamos.
 const openConversationInPanel = async conversation => {
+  conversationPreviewRequest += 1;
+  const requestId = conversationPreviewRequest;
   selectedConversation.value = conversation;
   try {
     const { data } = await ConversationAPI.show(conversation.id);
+    // Cliques rápidos em cards diferentes podem resolver fora de ordem: só a
+    // resposta do request mais recente pode escrever no store/abrir o modal.
+    if (requestId !== conversationPreviewRequest) return;
     store.commit(types.SET_ALL_CONVERSATION, [data]);
     store.commit(types.SET_CURRENT_CHAT_WINDOW, { id: data.id });
   } catch {
+    if (requestId !== conversationPreviewRequest) return;
     // Fallback: o payload do board já carrega a conversa (mensagens inclusas).
     store.commit(types.SET_ALL_CONVERSATION, [conversation]);
     store.commit(types.SET_CURRENT_CHAT_WINDOW, { id: conversation.id });

@@ -120,7 +120,11 @@ const mountComponent = () =>
           // O Dialog real é controlado por ref (open/close): o stub simula
           // para o teste validar que o board chama open() ao selecionar.
           data: () => ({ isOpen: false }),
-          methods: { open() { this.isOpen = true; } },
+          methods: {
+            open() {
+              this.isOpen = true;
+            },
+          },
           template: '<div v-if="isOpen">{{ $attrs.title }}<slot /></div>',
         },
         ConversationBox: { template: '<div data-testid="conversation-box" />' },
@@ -207,6 +211,28 @@ describe('PipelineBoard', () => {
     await flushPromises();
 
     // Each filter change re-fetches all columns
+    expect(mockStageConversations.mock.calls.length).toBeGreaterThan(
+      initialCallCount
+    );
+  });
+
+  it('re-fetches conversations when a multi-select filter changes', async () => {
+    const wrapper = mountComponent();
+    await flushPromises();
+
+    const initialCallCount = mockStageConversations.mock.calls.length;
+
+    // Filtro de status (TagMultiSelectComboBox, opções estáticas): o v-model
+    // precisa receber uma referência nova para o watch do board disparar o
+    // refetch (regressão: re-emitir o mesmo array mutado não atualizava).
+    const statusComboBox = wrapper.findAllComponents({
+      name: 'TagMultiSelectComboBox',
+    })[1];
+    await statusComboBox.find('div.cursor-pointer').trigger('click');
+    await statusComboBox.findAll('[role="option"]')[0].trigger('click');
+
+    await flushPromises();
+
     expect(mockStageConversations.mock.calls.length).toBeGreaterThan(
       initialCallCount
     );
