@@ -111,7 +111,12 @@ class Api::V1::Accounts::Integrations::TrelloController < Api::V1::Accounts::Int
   end
 
   def whatsapp_inbox
-    @whatsapp_inbox ||= Current.account.inboxes.find_by(id: params[:whatsapp_inbox_id], channel_type: 'Channel::Whatsapp')
+    @whatsapp_inbox ||= Current.account.inboxes.find_by(id: params[:whatsapp_inbox_id])
+    return if @whatsapp_inbox.blank?
+
+    # WhatsApp pode chegar como Channel::Whatsapp (Cloud API) ou como
+    # Channel::TwilioSms com medium whatsapp (Twilio) — igual ao resto do app.
+    @whatsapp_inbox if @whatsapp_inbox.whatsapp? || @whatsapp_inbox.twilio_whatsapp?
   end
 
   def register_remote_webhook

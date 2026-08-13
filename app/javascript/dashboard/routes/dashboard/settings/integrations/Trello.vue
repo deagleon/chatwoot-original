@@ -8,6 +8,7 @@ import {
 } from 'dashboard/composables/store';
 import { useAlert } from 'dashboard/composables';
 import integrationAPI from 'dashboard/api/integrations';
+import { INBOX_TYPES, TWILIO_CHANNEL_MEDIUM } from 'dashboard/helper/inbox';
 
 import Input from 'dashboard/components-next/input/Input.vue';
 import Button from 'dashboard/components-next/button/Button.vue';
@@ -36,8 +37,15 @@ const integration = useFunctionGetter('integrations/getIntegration', 'trello');
 const uiFlags = useMapGetter('integrations/getUIFlags');
 const inboxes = useMapGetter('inboxes/getInboxes');
 
+// WhatsApp pode chegar como Channel::Whatsapp (Cloud API) ou como
+// Channel::TwilioSms com medium whatsapp (Twilio) — mesma detecção do resto do app.
 const whatsappInboxes = computed(() =>
-  inboxes.value.filter(inbox => inbox.channel_type === 'Channel::Whatsapp')
+  inboxes.value.filter(
+    inbox =>
+      inbox.channel_type === INBOX_TYPES.WHATSAPP ||
+      (inbox.channel_type === INBOX_TYPES.TWILIO &&
+        inbox.medium === TWILIO_CHANNEL_MEDIUM.WHATSAPP)
+  )
 );
 
 const whatsappInboxOptions = computed(() =>
