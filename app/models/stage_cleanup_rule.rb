@@ -35,12 +35,21 @@ class StageCleanupRule < ApplicationRecord
     Time.current.in_time_zone(timezone)
   end
 
-  def local_today
-    local_now.to_date
+  # Most recent occurrence of cleanup_time in the rule's timezone:
+  # today's, if it has already passed; otherwise yesterday's.
+  def last_occurrence
+    now = local_now
+    hour, minute = cleanup_time.split(':').map(&:to_i)
+    occurrence = now.change(hour: hour, min: minute)
+    occurrence -= 1.day if now < occurrence
+    occurrence
   end
 
-  def due?
-    active? && local_now.strftime('%H:%M') >= cleanup_time && last_run_on != local_today
+  # Ocorrências anteriores à criação da regra são inelegíveis (comparação de
+  # instantes): sem esse filtro, regra nova dispararia já no primeiro sweep com
+  # a ocorrência de ontem e de novo no horário configurado do dia da criação.
+  def due?(occurrence = last_occurrence)
+    active? && occurrence >= created_at && (last_run_on.nil? || last_run_on < occurrence.to_date)
   end
 
   private

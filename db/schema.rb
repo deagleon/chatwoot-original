@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_08_13_000000) do
+ActiveRecord::Schema[7.1].define(version: 2026_08_15_000000) do
   # These extensions should be enabled to support this database
   enable_extension "pg_stat_statements"
   enable_extension "pg_trgm"
@@ -1470,6 +1470,18 @@ ActiveRecord::Schema[7.1].define(version: 2026_08_13_000000) do
     t.index ["account_id"], name: "index_sla_policies_on_account_id"
   end
 
+  create_table "stage_cleanup_rules", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.bigint "pipeline_stage_id", null: false
+    t.string "cleanup_time", null: false
+    t.boolean "active", default: true, null: false
+    t.date "last_run_on"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["account_id"], name: "index_stage_cleanup_rules_on_account_id"
+    t.index ["pipeline_stage_id"], name: "index_stage_cleanup_rules_on_pipeline_stage_id"
+  end
+
   create_table "taggings", id: :serial, force: :cascade do |t|
     t.integer "tag_id"
     t.string "taggable_type"
@@ -1611,6 +1623,8 @@ ActiveRecord::Schema[7.1].define(version: 2026_08_13_000000) do
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "inboxes", "portals"
+  add_foreign_key "stage_cleanup_rules", "accounts", on_delete: :cascade
+  add_foreign_key "stage_cleanup_rules", "pipeline_stages", on_delete: :cascade
   add_foreign_key "user_sessions", "users"
   create_trigger("accounts_after_insert_row_tr", :generated => true, :compatibility => 1).
       on("accounts").
