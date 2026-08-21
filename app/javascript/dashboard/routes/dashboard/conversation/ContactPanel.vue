@@ -34,7 +34,17 @@ const props = defineProps({
     type: Number,
     default: undefined,
   },
+  // When embedded (e.g. inside the pipeline board preview dialog), closing
+  // via the header X emits `close` instead of writing the global uiSettings
+  // that control the conversation-view sidebar. Default behavior (dashboard
+  // sidebar usage) stays unchanged.
+  embedded: {
+    type: Boolean,
+    default: false,
+  },
 });
+
+const emit = defineEmits(['close']);
 
 const {
   updateUISettings,
@@ -116,6 +126,11 @@ const onDragEnd = () => {
 };
 
 const closeContactPanel = () => {
+  // Embedded instances must not touch the global sidebar UI settings.
+  if (props.embedded) {
+    emit('close');
+    return;
+  }
   updateUISettings({
     is_contact_sidebar_open: false,
     is_copilot_panel_open: false,

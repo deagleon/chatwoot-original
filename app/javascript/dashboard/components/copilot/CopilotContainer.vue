@@ -10,12 +10,22 @@ import { vOnClickOutside } from '@vueuse/components';
 import { FEATURE_FLAGS } from 'dashboard/featureFlags';
 import wootConstants from 'dashboard/constants/globals';
 
-defineProps({
+const props = defineProps({
   conversationInboxType: {
     type: String,
     default: '',
   },
+  // When embedded (e.g. inside the pipeline board preview dialog), the panel
+  // is force-shown regardless of the global is_copilot_panel_open UI setting
+  // and renders statically within the parent layout instead of as a fixed
+  // overlay. Default behavior (Dashboard-level panel) stays unchanged.
+  embedded: {
+    type: Boolean,
+    default: false,
+  },
 });
+
+defineEmits(['close']);
 
 const store = useStore();
 const { uiSettings, updateUISettings } = useUISettings();
@@ -67,6 +77,8 @@ const activeAssistant = computed(() => {
 });
 
 const closeCopilotPanel = () => {
+  // Embedded instances must not touch the global sidebar UI settings.
+  if (props.embedded) return;
   if (isSmallScreen.value && uiSettings.value?.is_copilot_panel_open) {
     updateUISettings({
       is_contact_sidebar_open: false,
@@ -88,8 +100,20 @@ const shouldShowCopilotPanel = computed(() => {
     FEATURE_FLAGS.CAPTAIN
   );
   const { is_copilot_panel_open: isCopilotPanelOpen } = uiSettings.value;
-  return isCaptainEnabled && isCopilotPanelOpen && !uiFlags.value.fetchingList;
+  // Embedded instances are force-shown by the parent regardless of the global
+  // is_copilot_panel_open setting; the assistants list is still fetched on
+  // mount, but the embedded panel shows its own empty/loading state instead
+  // of staying hidden while the list loads.
+  const isPanelOpen =
+    props.embedded || (isCopilotPanelOpen && !uiFlags.value.fetchingList);
+  return isCaptainEnabled && isPanelOpen;
 });
+
+const containerClasses = computed(() =>
+  props.embedded
+    ? 'flex flex-col bg-n-surface-2 h-full w-[320px] min-w-[320px] shrink-0 overflow-hidden ltr:border-l rtl:border-r border-n-weak'
+    : 'bg-n-surface-2 h-full overflow-hidden flex-col fixed top-0 ltr:right-0 rtl:left-0 z-40 w-full max-w-sm transition-transform duration-300 ease-in-out md:static md:w-[320px] md:min-w-[320px] ltr:border-l rtl:border-r border-n-weak 2xl:min-w-[360px] 2xl:w-[360px] shadow-lg md:shadow-none'
+);
 
 const handleReset = () => {
   selectedCopilotThreadId.value = null;
@@ -126,8 +150,8 @@ onMounted(() => {
   <div
     v-if="shouldShowCopilotPanel"
     v-on-click-outside="() => closeCopilotPanel()"
-    class="bg-n-surface-2 h-full overflow-hidden flex-col fixed top-0 ltr:right-0 rtl:left-0 z-40 w-full max-w-sm transition-transform duration-300 ease-in-out md:static md:w-[320px] md:min-w-[320px] ltr:border-l rtl:border-r border-n-weak 2xl:min-w-[360px] 2xl:w-[360px] shadow-lg md:shadow-none"
     :class="[
+      containerClasses,
       {
         'md:flex': shouldShowCopilotPanel,
         'md:hidden': !shouldShowCopilotPanel,
@@ -140,9 +164,11 @@ onMounted(() => {
       :conversation-inbox-type="conversationInboxType"
       :assistants="assistants"
       :active-assistant="activeAssistant"
+      :embedded="embedded"
       @set-assistant="setAssistant"
       @send-message="sendMessage"
       @reset="handleReset"
+      @close="$emit('close')"
     />
   </div>
   <template v-else />

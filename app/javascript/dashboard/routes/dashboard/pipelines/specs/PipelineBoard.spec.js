@@ -2,6 +2,7 @@ import { mount, flushPromises } from '@vue/test-utils';
 import { ref } from 'vue';
 import { vi } from 'vitest';
 import PipelineBoard from '../pages/PipelineBoard.vue';
+import { BUS_EVENTS } from 'shared/constants/busEvents';
 
 const mockPipelinesShow = vi.fn();
 const mockStageConversations = vi.fn();
@@ -38,6 +39,9 @@ vi.mock('dashboard/composables/store', () => ({
     if (getter === 'inboxes/getInboxes') return ref([]);
     if (getter === 'agents/getAgents') return ref([]);
     if (getter === 'labels/getLabels') return ref([]);
+    if (getter === 'getCurrentAccountId') return ref(1);
+    if (getter === 'accounts/isFeatureEnabledonAccount')
+      return ref(() => false);
     return ref(null);
   },
 }));
@@ -46,8 +50,17 @@ vi.mock('dashboard/composables', () => ({
   useAlert: vi.fn(),
 }));
 
+const { emitterHandlers } = vi.hoisted(() => ({ emitterHandlers: {} }));
+
 vi.mock('shared/helpers/mitt', () => ({
-  emitter: { on: vi.fn(), off: vi.fn() },
+  emitter: {
+    on: vi.fn((event, handler) => {
+      emitterHandlers[event] = handler;
+    }),
+    off: vi.fn(event => {
+      delete emitterHandlers[event];
+    }),
+  },
 }));
 
 const mockRoute = ref({
@@ -123,15 +136,25 @@ const mountComponent = () =>
         Dialog: {
           // O Dialog real é controlado por ref (open/close): o stub simula
           // para o teste validar que o board chama open() ao selecionar.
+          name: 'Dialog',
           data: () => ({ isOpen: false }),
           methods: {
             open() {
               this.isOpen = true;
             },
+            close() {
+              this.isOpen = false;
+              this.$emit('close');
+            },
           },
-          template: '<div v-if="isOpen">{{ $attrs.title }}<slot /></div>',
+          template:
+            '<div v-if="isOpen">{{ $attrs.title }}<slot name="headerActions" /><slot /></div>',
         },
         ConversationBox: { template: '<div data-testid="conversation-box" />' },
+        ContactPanel: { template: '<div data-testid="contact-panel" />' },
+        CopilotContainer: {
+          template: '<div data-testid="copilot-container" />',
+        },
         // Listener do snooze do palete ninja-keys — headless; sem stub o
         // componente real quebra no mock de store sem getters.
         CmdBarConversationSnooze: { template: '<span />' },
@@ -139,7 +162,7 @@ const mountComponent = () =>
           props: ['stage', 'conversations', 'loading', 'hasMore'],
           emits: ['drop', 'open-card', 'open-conversation', 'load-more'],
           template:
-            '<div data-testid="column" :data-stage-id="stage.id" @drop="$emit(\'drop\', { stageId: stage.id, conversationId: 100 })"><button data-testid="ctx-open" @click="$emit(\'open-conversation\', { id: 100, status: \'open\', meta: { sender: { name: \'Charlie\' } }, messages: [{ id: 1, content: \'Proposal sent\' }] })" /></div>',
+            '<div data-testid="column" :data-stage-id="stage.id" :data-conversation-ids="conversations.map(c => c.id).join(\',\')" @drop="$emit(\'drop\', { stageId: stage.id, conversationId: 100 })"><button data-testid="ctx-open" @click="$emit(\'open-conversation\', { id: 100, status: \'open\', meta: { sender: { name: \'Charlie\' } }, messages: [{ id: 1, content: \'Proposal sent\' }] })" /></div>',
         },
       },
     },
@@ -265,5 +288,284 @@ describe('PipelineBoard', () => {
     });
     expect(wrapper.get('[data-testid="conversation-box"]').exists()).toBe(true);
     expect(wrapper.text()).toContain('Charlie');
+  });
+
+  it('toggles the modal-local contact panel and resets panels when the preview closes', async () => {
+    mockConversationShow.mockResolvedValue({
+      data: {
+        id: 100,
+        status: 'open',
+        inbox_id: 5,
+        meta: { sender: { name: 'Charlie' } },
+      },
+    });
+    const wrapper = mountComponent();
+    await flushPromises();
+
+    await wrapper.get('[data-testid="ctx-open"]').trigger('click');
+    await flushPromises();
+
+    // Painel fechado ao abrir; o toggle no header do dialog abre o painel.
+    expect(wrapper.find('[data-testid="contact-panel"]').exists()).toBe(false);
+    await wrapper
+      .get('button[aria-label="CONVERSATION.SIDEBAR.CONTACT"]')
+      .trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="contact-panel"]').exists()).toBe(true);
+
+    // Fechar o preview reseta o estado local; reabrir começa fechado de novo.
+    wrapper.findComponent({ name: 'Dialog' }).vm.close();
+    await flushPromises();
+    expect(wrapper.find('[data-testid="contact-panel"]').exists()).toBe(false);
+
+    await wrapper.get('[data-testid="ctx-open"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="contact-panel"]').exists()).toBe(false);
+  });
+
+  it('hides the Captain toggle when the CAPTAIN feature flag is off', async () => {
+    mockConversationShow.mockResolvedValue({
+      data: { id: 100, status: 'open', meta: { sender: { name: 'Charlie' } } },
+    });
+    const wrapper = mountComponent();
+    await flushPromises();
+
+    await wrapper.get('[data-testid="ctx-open"]').trigger('click');
+    await flushPromises();
+
+    // Mock do isFeatureEnabledonAccount devolve () => false.
+    expect(
+      wrapper.find('button[aria-label="CONVERSATION.SIDEBAR.COPILOT"]').exists()
+    ).toBe(false);
+  });
+
+  it('inserts a live-created conversation into its stage column sorted', async () => {
+    const wrapper = mountComponent();
+    await flushPromises();
+
+    const initialCallCount = mockStageConversations.mock.calls.length;
+
+    // last_activity_at mais recente que os cards existentes (que não têm o
+    // campo → ordenam como 0): o card novo entra no topo da coluna.
+    emitterHandlers[BUS_EVENTS.CONVERSATION_CREATED]({
+      id: 300,
+      status: 'open',
+      inbox_id: 5,
+      labels: [],
+      unread_count: 1,
+      pipeline_stage_id: 10,
+      pipeline_stage_changed_at: new Date().toISOString(),
+      last_activity_at: Math.floor(Date.now() / 1000),
+      meta: { sender: { name: 'Dana', thumbnail: '' }, assignee: null },
+      messages: [{ content: 'New lead' }],
+    });
+    await flushPromises();
+
+    const columns = wrapper.findAll('[data-testid="column"]');
+    expect(columns[0].attributes('data-conversation-ids')).toBe('300,100,101');
+    // Sem refetch — o card entra direto do payload do cable
+    expect(mockStageConversations.mock.calls.length).toBe(initialCallCount);
+  });
+
+  it('keeps a live-inserted card when a stage fetch is still in flight', async () => {
+    // Cenário: refetch da coluna em voo quando o created chega — a resposta
+    // antiga substituiria a coluna inteira e descartaria o card inserido. O
+    // board invalida o request em voo (bump de seq) e agenda refetch.
+    vi.useFakeTimers();
+    try {
+      const wrapper = mountComponent();
+      await vi.advanceTimersByTimeAsync(0);
+
+      const stage20Response = Promise.resolve({
+        data: {
+          data: { payload: stageConversations[20], meta: { all_count: 1 } },
+        },
+      });
+      let resolveStale;
+      const staleResponse = new Promise(resolve => {
+        resolveStale = resolve;
+      });
+      mockStageConversations.mockImplementation((_pipelineId, stageId) =>
+        stageId === 10 ? staleResponse : stage20Response
+      );
+
+      // Filter change → refetch de todas as colunas; stage 10 fica em voo.
+      const assigneeComboBox = wrapper.findComponent({ name: 'ComboBox' });
+      assigneeComboBox.vm.$emit('update:modelValue', 42);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(mockStageConversations.mock.calls.length).toBe(4);
+
+      const createdCard = {
+        id: 304,
+        status: 'open',
+        inbox_id: 5,
+        labels: [],
+        unread_count: 1,
+        pipeline_stage_id: 10,
+        pipeline_stage_changed_at: new Date().toISOString(),
+        last_activity_at: Math.floor(Date.now() / 1000),
+        meta: { sender: { name: 'Dana', thumbnail: '' }, assignee: { id: 42 } },
+        messages: [{ content: 'New lead' }],
+      };
+      emitterHandlers[BUS_EVENTS.CONVERSATION_CREATED](createdCard);
+      await vi.advanceTimersByTimeAsync(0);
+
+      let columns = wrapper.findAll('[data-testid="column"]');
+      expect(columns[0].attributes('data-conversation-ids')).toBe(
+        '304,100,101'
+      );
+
+      // A resposta antiga (sem o card) resolve: não pode sobrescrever a coluna.
+      resolveStale({
+        data: {
+          data: { payload: stageConversations[10], meta: { all_count: 2 } },
+        },
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      columns = wrapper.findAll('[data-testid="column"]');
+      expect(columns[0].attributes('data-conversation-ids')).toBe(
+        '304,100,101'
+      );
+
+      // Refetch debounced chega com os dados autoritativos (servidor já tem o
+      // card novo) — um único fetch extra, card permanece.
+      mockStageConversations.mockImplementation((_pipelineId, stageId) =>
+        stageId === 10
+          ? Promise.resolve({
+              data: {
+                data: {
+                  payload: [createdCard, ...stageConversations[10]],
+                  meta: { all_count: 3 },
+                },
+              },
+            })
+          : stage20Response
+      );
+      await vi.advanceTimersByTimeAsync(400);
+      expect(mockStageConversations.mock.calls.length).toBe(5);
+      columns = wrapper.findAll('[data-testid="column"]');
+      expect(columns[0].attributes('data-conversation-ids')).toBe(
+        '304,100,101'
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('ignores a created conversation that does not match the active filters', async () => {
+    const wrapper = mountComponent();
+    await flushPromises();
+
+    // Filtro de status = open (mesma interação do teste de refetch de filtros)
+    const statusComboBox = wrapper.findAllComponents({
+      name: 'TagMultiSelectComboBox',
+    })[1];
+    await statusComboBox.find('div.cursor-pointer').trigger('click');
+    await statusComboBox.findAll('[role="option"]')[0].trigger('click');
+    await flushPromises();
+
+    emitterHandlers[BUS_EVENTS.CONVERSATION_CREATED]({
+      id: 301,
+      status: 'resolved',
+      inbox_id: 5,
+      labels: [],
+      unread_count: 0,
+      pipeline_stage_id: 10,
+      pipeline_stage_changed_at: new Date().toISOString(),
+      last_activity_at: Math.floor(Date.now() / 1000),
+      meta: { sender: { name: 'Eve', thumbnail: '' }, assignee: null },
+      messages: [],
+    });
+    await flushPromises();
+
+    const columns = wrapper.findAll('[data-testid="column"]');
+    expect(columns[0].attributes('data-conversation-ids')).toBe('100,101');
+  });
+
+  it('ignores a created conversation already present on the board', async () => {
+    const wrapper = mountComponent();
+    await flushPromises();
+
+    // id 200 já existe na coluna do stage 20 — moves ficam com o
+    // CONVERSATION_UPDATED, o created não pode duplicar o card.
+    emitterHandlers[BUS_EVENTS.CONVERSATION_CREATED]({
+      id: 200,
+      status: 'open',
+      inbox_id: 5,
+      labels: [],
+      unread_count: 0,
+      pipeline_stage_id: 10,
+      pipeline_stage_changed_at: new Date().toISOString(),
+      last_activity_at: Math.floor(Date.now() / 1000),
+      meta: { sender: { name: 'Charlie', thumbnail: '' }, assignee: null },
+      messages: [],
+    });
+    await flushPromises();
+
+    const columns = wrapper.findAll('[data-testid="column"]');
+    expect(columns[0].attributes('data-conversation-ids')).toBe('100,101');
+    expect(columns[1].attributes('data-conversation-ids')).toBe('200');
+  });
+
+  it('refetches the target stage instead of inserting when search is active', async () => {
+    // O refetch do created usa o mesmo debounce do input de busca — fake
+    // timers para validar o coalescing e o disparo único.
+    vi.useFakeTimers();
+    try {
+      const wrapper = mountComponent();
+      await vi.advanceTimersByTimeAsync(0);
+
+      await wrapper
+        .find('input[placeholder="PIPELINES.BOARD.FILTER.SEARCH_PLACEHOLDER"]')
+        .setValue('proposal');
+
+      const initialCallCount = mockStageConversations.mock.calls.length;
+
+      emitterHandlers[BUS_EVENTS.CONVERSATION_CREATED]({
+        id: 302,
+        status: 'open',
+        inbox_id: 5,
+        labels: [],
+        unread_count: 0,
+        pipeline_stage_id: 10,
+        pipeline_stage_changed_at: new Date().toISOString(),
+        last_activity_at: Math.floor(Date.now() / 1000),
+        meta: { sender: { name: 'Frank', thumbnail: '' }, assignee: null },
+        messages: [{ content: 'proposal please' }],
+      });
+      emitterHandlers[BUS_EVENTS.CONVERSATION_CREATED]({
+        id: 303,
+        status: 'open',
+        inbox_id: 5,
+        labels: [],
+        unread_count: 0,
+        pipeline_stage_id: 10,
+        pipeline_stage_changed_at: new Date().toISOString(),
+        last_activity_at: Math.floor(Date.now() / 1000),
+        meta: { sender: { name: 'Gina', thumbnail: '' }, assignee: null },
+        messages: [{ content: 'another proposal' }],
+      });
+
+      // Burst de eventos coalesce: nenhum fetch imediato
+      expect(mockStageConversations.mock.calls.length).toBe(initialCallCount);
+
+      // Dispara os debounces e drena as promises dos fetches
+      await vi.advanceTimersByTimeAsync(400);
+
+      // Debounce da busca pendente (fetchAllColumns: 2 colunas) + um único
+      // refetch coalescido da coluna alvo com o q ativo — sem inserção às cegas
+      expect(mockStageConversations.mock.calls.length).toBe(
+        initialCallCount + 3
+      );
+      expect(mockStageConversations).toHaveBeenLastCalledWith(
+        '1',
+        10,
+        expect.objectContaining({ page: 1, q: 'proposal' })
+      );
+      const columns = wrapper.findAll('[data-testid="column"]');
+      expect(columns[0].attributes('data-conversation-ids')).toBe('100,101');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

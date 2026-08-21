@@ -16,11 +16,13 @@ import { emitter } from 'shared/helpers/mitt';
 import { BUS_EVENTS } from 'shared/constants/busEvents';
 
 import types from 'dashboard/store/mutation-types';
+import { FEATURE_FLAGS } from 'dashboard/featureFlags';
 import PipelinesAPI from 'dashboard/api/pipelines';
 import ConversationAPI from 'dashboard/api/inbox/conversation';
 import CmdBarConversationSnooze from 'dashboard/routes/dashboard/commands/CmdBarConversationSnooze.vue';
 import Icon from 'dashboard/components-next/icon/Icon.vue';
 import Dialog from 'dashboard/components-next/dialog/Dialog.vue';
+import Button from 'dashboard/components-next/button/Button.vue';
 import NextInput from 'dashboard/components-next/input/Input.vue';
 import ComboBox from 'dashboard/components-next/combobox/ComboBox.vue';
 import TagMultiSelectComboBox from 'dashboard/components-next/combobox/TagMultiSelectComboBox.vue';
@@ -29,6 +31,14 @@ import TagMultiSelectComboBox from 'dashboard/components-next/combobox/TagMultiS
 // quando o preview abre — o board inicial não paga esse custo.
 const ConversationBox = defineAsyncComponent(
   () => import('dashboard/components/widgets/conversation/ConversationBox.vue')
+);
+// Lazy pelo mesmo motivo: painel de contato e Captain só carregam quando o
+// usuário abre o toggle correspondente dentro do preview.
+const ContactPanel = defineAsyncComponent(
+  () => import('dashboard/routes/dashboard/conversation/ContactPanel.vue')
+);
+const CopilotContainer = defineAsyncComponent(
+  () => import('dashboard/components/copilot/CopilotContainer.vue')
 );
 import PipelineBoardColumn from '../components/PipelineBoardColumn.vue';
 
@@ -39,6 +49,10 @@ const { t } = useI18n();
 const inboxes = useMapGetter('inboxes/getInboxes');
 const agents = useMapGetter('agents/getAgents');
 const labels = useMapGetter('labels/getLabels');
+const currentAccountId = useMapGetter('getCurrentAccountId');
+const isFeatureEnabledonAccount = useMapGetter(
+  'accounts/isFeatureEnabledonAccount'
+);
 
 const pipelineId = computed(() => route.params.pipelineId);
 
@@ -50,6 +64,39 @@ const pageByStage = reactive({});
 const selectedConversation = ref(null);
 const previewDialogRef = ref(null);
 const isLoading = ref(false);
+
+// Modal-local side panel state: o preview não pode escrever nos uiSettings
+// globais (is_contact_sidebar_open/is_copilot_panel_open) — eles controlam os
+// painéis da view de conversa atrás do dialog e vazariam estado ao fechar.
+const isContactPanelOpen = ref(false);
+const isCopilotPanelOpen = ref(false);
+
+const isCaptainEnabled = computed(() =>
+  isFeatureEnabledonAccount.value(currentAccountId.value, FEATURE_FLAGS.CAPTAIN)
+);
+
+const isSidePanelOpen = computed(
+  () => isContactPanelOpen.value || isCopilotPanelOpen.value
+);
+
+// Espelha o SidepanelSwitch: um painel lateral por vez.
+const handleContactPanelToggle = () => {
+  isContactPanelOpen.value = !isContactPanelOpen.value;
+  isCopilotPanelOpen.value = false;
+};
+
+const handleCopilotPanelToggle = () => {
+  isCopilotPanelOpen.value = !isCopilotPanelOpen.value;
+  isContactPanelOpen.value = false;
+};
+
+const handleContactPanelClose = () => {
+  isContactPanelOpen.value = false;
+};
+
+const handleCopilotPanelClose = () => {
+  isCopilotPanelOpen.value = false;
+};
 
 const filters = reactive({
   inbox_ids: [],
@@ -64,6 +111,15 @@ let searchDebounce = null;
 // Contador de requests do preview: só a resposta do clique mais recente pode
 // escrever no store (evita overwrite por resposta antiga que chega atrasada).
 let conversationPreviewRequest = 0;
+// Debounce dos refetches disparados por conversation.created com busca (q)
+// ativa — mesmo padrão do input de busca: um burst de eventos coalesce em um
+// único refetch por coluna alvo.
+const createdRefetchDebounce = {};
+// Sequência de requests por coluna: só a resposta do request mais recente
+// pode escrever no estado da coluna (evita resposta antiga — ex.: fetch
+// filtrado por q em voo quando a busca foi limpa — sobrescrever o reload
+// completo que resolveu depois).
+const stageFetchRequestSeq = {};
 
 const statusOptions = [
   { value: 'open', label: 'Open' },
@@ -120,6 +176,8 @@ const fetchPipeline = async () => {
 };
 
 const fetchStageConversations = async (stageId, page = 1) => {
+  stageFetchRequestSeq[stageId] = (stageFetchRequestSeq[stageId] ?? 0) + 1;
+  const requestSeq = stageFetchRequestSeq[stageId];
   loadingByStage[stageId] = true;
   try {
     const params = { ...buildParams(), page };
@@ -128,6 +186,10 @@ const fetchStageConversations = async (stageId, page = 1) => {
       stageId,
       params
     );
+    // Resposta de request antigo (ex.: fetch filtrado por q que ainda estava
+    // em voo quando a busca foi limpa): descarta para não sobrescrever o
+    // estado mais novo da coluna.
+    if (requestSeq !== stageFetchRequestSeq[stageId]) return;
     // O endpoint envolve em json.data { meta, payload } — a leitura é
     // response.data.data, não response.data.
     const payload = response.data?.data?.payload ?? [];
@@ -135,9 +197,12 @@ const fetchStageConversations = async (stageId, page = 1) => {
     if (page === 1) {
       conversationsByStage[stageId] = payload;
     } else {
+      // Cartões inseridos em tempo real podem aparecer de novo na página do
+      // servidor — o dedupe evita cards duplicados no append.
+      const existingIds = new Set(conversationsByStage[stageId].map(c => c.id));
       conversationsByStage[stageId] = [
         ...conversationsByStage[stageId],
-        ...payload,
+        ...payload.filter(c => !existingIds.has(c.id)),
       ];
     }
     hasMoreByStage[stageId] =
@@ -147,7 +212,10 @@ const fetchStageConversations = async (stageId, page = 1) => {
   } catch {
     // silently ignore — individual column errors don't block the board
   } finally {
-    loadingByStage[stageId] = false;
+    // Um request mais novo já em andamento mantém o loading dele.
+    if (requestSeq === stageFetchRequestSeq[stageId]) {
+      loadingByStage[stageId] = false;
+    }
   }
 };
 
@@ -296,6 +364,66 @@ const onSearchInput = () => {
   }, 400);
 };
 
+// Refetch debounced da coluna alvo quando um created chega com busca (q)
+// ativa — burst de eventos vira um único fetch por coluna.
+const scheduleCreatedRefetch = stageId => {
+  clearTimeout(createdRefetchDebounce[stageId]);
+  createdRefetchDebounce[stageId] = setTimeout(() => {
+    delete createdRefetchDebounce[stageId];
+    fetchStageConversations(stageId, 1);
+  }, 400);
+};
+
+// Real-time: react to conversation.created events from ActionCable so new
+// conversations with a pipeline stage show up on the board without a refresh.
+// O payload do cable (EventDataPresenter#push_data) já tem o mesmo shape do
+// card do board (id = display_id, meta.sender, messages, last_activity_at
+// epoch, pipeline_stage_changed_at ISO) — insere direto, como o merge do
+// onConversationUpdated.
+const matchesActiveFilters = data => {
+  if (filters.inbox_ids.length && !filters.inbox_ids.includes(data.inbox_id))
+    return false;
+  if (filters.assignee_id && data.meta?.assignee?.id !== filters.assignee_id)
+    return false;
+  if (filters.label && !(data.labels || []).includes(filters.label))
+    return false;
+  if (filters.status.length && !filters.status.includes(data.status))
+    return false;
+  return true;
+};
+
+const onConversationCreated = data => {
+  const stageId = data.pipeline_stage_id;
+  if (!stageId || !conversationsByStage[stageId]) return;
+
+  const alreadyOnBoard = Object.values(conversationsByStage).some(list =>
+    list?.some(c => c.id === data.id)
+  );
+  if (alreadyOnBoard) return;
+
+  // A busca (q) casa com conteúdo de mensagens/contatos no servidor — não dá
+  // para avaliar client-side; re-fetcha a coluna alvo (debounced) para manter
+  // o resultado correto.
+  if (filters.q) {
+    scheduleCreatedRefetch(stageId);
+    return;
+  }
+
+  if (!matchesActiveFilters(data)) return;
+
+  // Fetch da coluna em voo: a resposta substituiria conversationsByStage[stageId]
+  // inteiro e descartaria o card recém-inserido. Invalida o request em voo
+  // (bump de seq antes da inserção) e agenda o refetch para o estado convergir
+  // com o servidor dentro da janela de debounce.
+  if (loadingByStage[stageId]) {
+    stageFetchRequestSeq[stageId] = (stageFetchRequestSeq[stageId] ?? 0) + 1;
+    scheduleCreatedRefetch(stageId);
+  }
+
+  conversationsByStage[stageId] = [...conversationsByStage[stageId], data];
+  sortColumn(stageId);
+};
+
 // Real-time: react to conversation.updated events from ActionCable
 const onConversationUpdated = data => {
   const conversationId = data.id;
@@ -382,6 +510,9 @@ const onCardMarkUnread = async conversationId => {
 
 const closePreview = () => {
   selectedConversation.value = null;
+  // Reset dos painéis locais: reabrir o preview começa com ambos fechados.
+  isContactPanelOpen.value = false;
+  isCopilotPanelOpen.value = false;
   // Sem isso, a conversa continua "selecionada" no store e o
   // DashboardAudioNotificationHelper silencia os sons das mensagens novas
   // dela enquanto o board está aberto.
@@ -391,14 +522,17 @@ const closePreview = () => {
 onMounted(async () => {
   await fetchPipeline();
   fetchAllColumns();
+  emitter.on(BUS_EVENTS.CONVERSATION_CREATED, onConversationCreated);
   emitter.on(BUS_EVENTS.CONVERSATION_UPDATED, onConversationUpdated);
   emitter.on(BUS_EVENTS.MESSAGE_CREATED, onMessageCreated);
 });
 
 onBeforeUnmount(() => {
+  emitter.off(BUS_EVENTS.CONVERSATION_CREATED, onConversationCreated);
   emitter.off(BUS_EVENTS.CONVERSATION_UPDATED, onConversationUpdated);
   emitter.off(BUS_EVENTS.MESSAGE_CREATED, onMessageCreated);
   clearTimeout(searchDebounce);
+  Object.values(createdRefetchDebounce).forEach(clearTimeout);
 });
 
 watch(
@@ -498,22 +632,76 @@ watch(
     <Dialog
       ref="previewDialogRef"
       :title="selectedConversation?.meta?.sender?.name ?? ''"
-      width="3xl"
+      :width="isSidePanelOpen ? '6xl' : '3xl'"
       :show-cancel-button="false"
       :show-confirm-button="false"
       @close="closePreview"
     >
+      <!-- Toggles dos painéis laterais do preview (contato / Captain): estado
+           local ao modal, mesma linguagem visual do SidepanelSwitch. Sem
+           tooltip (v-tooltip teleporta para o body, que pinta atrás do
+           top-layer do dialog nativo) — o nome acessível vem do aria-label. -->
+      <template #headerActions>
+        <div v-if="selectedConversation" class="flex items-center gap-1">
+          <Button
+            ghost
+            slate
+            sm
+            type="button"
+            icon="i-ph-user-bold"
+            class="!rounded-full transition-all duration-[250ms] ease-out active:!scale-95 active:!brightness-105 active:duration-75"
+            :class="{ 'bg-n-alpha-2 active:shadow-sm': isContactPanelOpen }"
+            :aria-label="t('CONVERSATION.SIDEBAR.CONTACT')"
+            @click="handleContactPanelToggle"
+          />
+          <Button
+            v-if="isCaptainEnabled"
+            ghost
+            slate
+            sm
+            type="button"
+            icon="i-woot-captain"
+            class="!rounded-full transition-all duration-[250ms] ease-out active:!scale-95 active:!brightness-105 active:duration-75"
+            :class="{
+              'bg-n-alpha-2 !text-n-iris-9 active:!brightness-105 active:shadow-sm':
+                isCopilotPanelOpen,
+            }"
+            :aria-label="t('CONVERSATION.SIDEBAR.COPILOT')"
+            @click="handleCopilotPanelToggle"
+          />
+        </div>
+      </template>
       <!-- Modal com altura que acomoda o conteúdo típico (header + mensagens +
            composer) e cresce até 80vh para conversas longas. O flex-1 + h-full
            no ConversationBox permite que o MessagesView (que tem h-full +
-           flex-grow) ocupe o espaço entre header e composer. -->
+           flex-grow) ocupe o espaço entre header e composer. Os painéis
+           laterais ficam na mesma linha flex, com largura fixa; em viewports
+           estreitos o ConversationBox (min-w-0) comprime em vez de estourar. -->
       <div class="flex flex-col min-h-[28rem] h-[36rem] max-h-[80vh]">
-        <ConversationBox
-          class="h-full flex-1 min-h-0 flex flex-col"
-          :is-contact-panel-open="false"
-          :is-on-expanded-layout="false"
-          :is-inbox-view
-        />
+        <div class="flex flex-1 min-h-0">
+          <ConversationBox
+            class="h-full flex-1 min-h-0 flex flex-col"
+            :is-contact-panel-open="false"
+            :is-on-expanded-layout="false"
+            :is-inbox-view
+          />
+          <div
+            v-if="isContactPanelOpen"
+            class="w-[320px] shrink-0 h-full overflow-y-auto bg-n-surface-2 ltr:border-l rtl:border-r border-n-weak"
+          >
+            <ContactPanel
+              :conversation-id="selectedConversation.id"
+              :inbox-id="selectedConversation.inbox_id"
+              embedded
+              @close="handleContactPanelClose"
+            />
+          </div>
+          <CopilotContainer
+            v-if="isCopilotPanelOpen"
+            embedded
+            @close="handleCopilotPanelClose"
+          />
+        </div>
       </div>
     </Dialog>
 

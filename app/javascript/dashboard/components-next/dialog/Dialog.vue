@@ -51,7 +51,10 @@ const props = defineProps({
   width: {
     type: String,
     default: 'lg',
-    validator: value => ['3xl', '2xl', 'xl', 'lg', 'md', 'sm'].includes(value),
+    validator: value =>
+      ['7xl', '6xl', '5xl', '3xl', '2xl', 'xl', 'lg', 'md', 'sm'].includes(
+        value
+      ),
   },
   position: {
     type: String,
@@ -73,6 +76,9 @@ const titleId = useId();
 
 const maxWidthClass = computed(() => {
   const classesMap = {
+    '7xl': 'max-w-7xl',
+    '6xl': 'max-w-6xl',
+    '5xl': 'max-w-5xl',
     '3xl': 'max-w-3xl',
     '2xl': 'max-w-2xl',
     xl: 'max-w-xl',
@@ -137,18 +143,31 @@ defineExpose({ open, close });
           @submit.prevent="confirm"
           @click.stop
         >
-          <div v-if="title || description" class="flex flex-col gap-2">
-            <h3
-              :id="titleId"
-              class="text-base font-medium leading-6 text-n-slate-12"
+          <div
+            v-if="title || description || $slots.headerActions"
+            class="flex items-start justify-between gap-3"
+          >
+            <div class="flex flex-col flex-1 min-w-0 gap-2">
+              <h3
+                :id="titleId"
+                class="text-base font-medium leading-6 text-n-slate-12"
+              >
+                {{ title }}
+              </h3>
+              <slot name="description">
+                <p v-if="description" class="mb-0 text-sm text-n-slate-11">
+                  {{ description }}
+                </p>
+              </slot>
+            </div>
+            <!-- Optional actions rendered beside the title (e.g. panel
+                 toggles in the pipeline board preview) -->
+            <div
+              v-if="$slots.headerActions"
+              class="flex items-center gap-1 shrink-0"
             >
-              {{ title }}
-            </h3>
-            <slot name="description">
-              <p v-if="description" class="mb-0 text-sm text-n-slate-11">
-                {{ description }}
-              </p>
-            </slot>
+              <slot name="headerActions" />
+            </div>
           </div>
           <slot v-if="isOpen" />
           <!-- Dialog content will be injected here -->

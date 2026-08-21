@@ -31,9 +31,15 @@ const props = defineProps({
     type: Object,
     default: () => ({}),
   },
+  // Embedded instances (e.g. the pipeline board preview modal) are controlled
+  // by their parent instead of the global sidebar UI settings.
+  embedded: {
+    type: Boolean,
+    default: false,
+  },
 });
 
-const emit = defineEmits(['sendMessage', 'reset', 'setAssistant']);
+const emit = defineEmits(['sendMessage', 'reset', 'setAssistant', 'close']);
 
 const { t } = useI18n();
 
@@ -89,6 +95,12 @@ const isLastMessageFromAssistant = computed(() => {
 const { updateUISettings } = useUISettings();
 
 const closeCopilotPanel = () => {
+  // Embedded instances must not touch the global sidebar UI settings — the
+  // parent decides how to close the panel.
+  if (props.embedded) {
+    emit('close');
+    return;
+  }
   updateUISettings({
     is_copilot_panel_open: false,
     is_contact_sidebar_open: false,

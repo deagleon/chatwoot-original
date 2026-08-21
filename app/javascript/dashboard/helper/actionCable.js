@@ -118,6 +118,7 @@ class ActionCableConnector extends BaseActionCableConnector {
 
   onConversationCreated = data => {
     this.app.$store.dispatch('addConversation', data);
+    emitter.emit(BUS_EVENTS.CONVERSATION_CREATED, data);
     this.fetchConversationStats();
   };
 
