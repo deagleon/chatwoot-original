@@ -32,8 +32,8 @@ import TagMultiSelectComboBox from 'dashboard/components-next/combobox/TagMultiS
 const ConversationBox = defineAsyncComponent(
   () => import('dashboard/components/widgets/conversation/ConversationBox.vue')
 );
-// Lazy pelo mesmo motivo: painel de contato e Captain só carregam quando o
-// usuário abre o toggle correspondente dentro do preview.
+// Lazy pelo mesmo motivo: painel de contato (abre por padrão junto do
+// preview) e Captain (opt-in) só carregam quando o preview os usa.
 const ContactPanel = defineAsyncComponent(
   () => import('dashboard/routes/dashboard/conversation/ContactPanel.vue')
 );
@@ -346,6 +346,9 @@ const openConversationInPanel = async conversation => {
   // agent_last_seen_at no backend.
   store.dispatch('markMessagesRead', { id: conversation.id });
   onCardMarkRead(conversation.id);
+  // Painel de informações do cliente vem ativado por padrão ao abrir o
+  // preview; o Captain continua opt-in.
+  isContactPanelOpen.value = true;
   previewDialogRef.value?.open();
 };
 
@@ -510,8 +513,8 @@ const onCardMarkUnread = async conversationId => {
 
 const closePreview = () => {
   selectedConversation.value = null;
-  // Reset dos painéis locais: reabrir o preview começa com ambos fechados.
-  isContactPanelOpen.value = false;
+  // Reset dos painéis locais: o Captain volta fechado; o painel de contato é
+  // reativado no próximo open() (padrão do preview).
   isCopilotPanelOpen.value = false;
   // Sem isso, a conversa continua "selecionada" no store e o
   // DashboardAudioNotificationHelper silencia os sons das mensagens novas

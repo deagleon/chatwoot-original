@@ -305,22 +305,17 @@ describe('PipelineBoard', () => {
     await wrapper.get('[data-testid="ctx-open"]').trigger('click');
     await flushPromises();
 
-    // Painel fechado ao abrir; o toggle no header do dialog abre o painel.
-    expect(wrapper.find('[data-testid="contact-panel"]').exists()).toBe(false);
-    await wrapper
-      .get('button[aria-label="CONVERSATION.SIDEBAR.CONTACT"]')
-      .trigger('click');
-    await flushPromises();
+    // Painel de contato vem ativado por padrão ao abrir o preview.
     expect(wrapper.find('[data-testid="contact-panel"]').exists()).toBe(true);
 
-    // Fechar o preview reseta o estado local; reabrir começa fechado de novo.
+    // Fechar o preview reseta o estado local; reabrir ativa o painel de novo.
     wrapper.findComponent({ name: 'Dialog' }).vm.close();
     await flushPromises();
     expect(wrapper.find('[data-testid="contact-panel"]').exists()).toBe(false);
 
     await wrapper.get('[data-testid="ctx-open"]').trigger('click');
     await flushPromises();
-    expect(wrapper.find('[data-testid="contact-panel"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="contact-panel"]').exists()).toBe(true);
   });
 
   it('hides the Captain toggle when the CAPTAIN feature flag is off', async () => {
