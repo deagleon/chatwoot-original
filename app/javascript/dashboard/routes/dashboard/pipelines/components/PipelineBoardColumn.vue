@@ -1,5 +1,6 @@
 <script setup>
 import { useI18n } from 'vue-i18n';
+import { Virtualizer } from 'virtua/vue';
 
 import Icon from 'dashboard/components-next/icon/Icon.vue';
 import PipelineBoardCard from './PipelineBoardCard.vue';
@@ -51,7 +52,7 @@ const onDragOver = e => {
 
 <template>
   <div
-    class="flex flex-col w-[280px] flex-shrink-0 h-full rounded-lg bg-n-solid-2 border border-n-weak transition-colors duration-150 motion-reduce:transition-none"
+    class="flex flex-col w-[280px] flex-shrink-0 h-full rounded-lg bg-n-solid-2 border border-n-weak transition-colors duration-150 motion-reduce:transition-none [content-visibility:auto] [contain-intrinsic-size:auto_280px_auto_100%] [contain:layout_style_paint]"
     role="list"
     :aria-label="stage.name"
     @dragover="onDragOver"
@@ -79,7 +80,7 @@ const onDragOver = e => {
     </div>
 
     <!-- Cards -->
-    <div class="flex-1 overflow-y-auto px-2 py-2 space-y-2 min-h-0">
+    <div class="flex-1 overflow-y-auto px-2 py-2 min-h-0">
       <div
         v-if="loading && conversations.length === 0"
         class="flex justify-center py-4"
@@ -90,18 +91,25 @@ const onDragOver = e => {
         />
       </div>
       <template v-else>
-        <PipelineBoardCard
-          v-for="conversation in conversations"
-          :key="conversation.id"
-          :conversation="conversation"
-          :stage="stage"
-          @open="conv => emit('open-card', conv)"
-          @open-conversation="conv => emit('open-conversation', conv)"
-          @mark-read="conversationId => emit('mark-read', conversationId)"
-          @mark-unread="conversationId => emit('mark-unread', conversationId)"
-        />
+        <Virtualizer
+          v-if="conversations.length > 0"
+          v-slot="{ item: conversation }"
+          :data="conversations"
+        >
+          <div class="pb-2">
+            <PipelineBoardCard
+              :key="conversation.id"
+              :conversation="conversation"
+              :stage="stage"
+              @open="conv => emit('open-card', conv)"
+              @open-conversation="conv => emit('open-conversation', conv)"
+              @mark-read="conversationId => emit('mark-read', conversationId)"
+              @mark-unread="conversationId => emit('mark-unread', conversationId)"
+            />
+          </div>
+        </Virtualizer>
         <div
-          v-if="conversations.length === 0 && !loading"
+          v-else-if="!loading"
           class="flex items-center justify-center py-4 text-xs text-n-slate-10"
         >
           {{ t('PIPELINES.BOARD.COLUMN.EMPTY') }}

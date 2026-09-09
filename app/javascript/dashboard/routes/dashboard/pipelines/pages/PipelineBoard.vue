@@ -635,7 +635,7 @@ watch(
     <Dialog
       ref="previewDialogRef"
       :title="selectedConversation?.meta?.sender?.name ?? ''"
-      :width="isSidePanelOpen ? '6xl' : '3xl'"
+      :width="isSidePanelOpen ? '7xl' : '5xl'"
       :show-cancel-button="false"
       :show-confirm-button="false"
       @close="closePreview"
@@ -672,21 +672,25 @@ watch(
             :aria-label="t('CONVERSATION.SIDEBAR.COPILOT')"
             @click="handleCopilotPanelToggle"
           />
+          <Button
+            ghost
+            slate
+            xs
+            icon="i-lucide-x"
+            class="!rounded-full ml-1"
+            @click="previewDialogRef?.close()"
+          />
         </div>
       </template>
-      <!-- Modal com altura que acomoda o conteúdo típico (header + mensagens +
-           composer) e cresce até 80vh para conversas longas. O flex-1 + h-full
-           no ConversationBox permite que o MessagesView (que tem h-full +
-           flex-grow) ocupe o espaço entre header e composer. Os painéis
-           laterais ficam na mesma linha flex, com largura fixa; em viewports
-           estreitos o ConversationBox (min-w-0) comprime em vez de estourar. -->
-      <div class="flex flex-col min-h-[28rem] h-[36rem] max-h-[80vh]">
+      <!-- Modal espaçoso usando width 7xl/5xl e 80vh para acomodar mensagens,
+           composer e painéis confortavelmente sem sufocar a conversa. -->
+      <div class="flex flex-col min-h-[32rem] h-[80vh] max-h-[84vh]">
         <div class="flex flex-1 min-h-0">
           <ConversationBox
             class="h-full flex-1 min-h-0 flex flex-col"
             :is-contact-panel-open="false"
             :is-on-expanded-layout="false"
-            :is-inbox-view
+            :is-inbox-view="false"
           />
           <div
             v-if="isContactPanelOpen"
