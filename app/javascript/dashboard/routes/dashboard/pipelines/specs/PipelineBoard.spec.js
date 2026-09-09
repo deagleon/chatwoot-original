@@ -563,4 +563,90 @@ describe('PipelineBoard', () => {
       vi.useRealTimers();
     }
   });
+
+  it('inserts an updated conversation into its stage when not previously on the board', async () => {
+    const wrapper = mountComponent();
+    await flushPromises();
+
+    const initialCallCount = mockStageConversations.mock.calls.length;
+
+    // Cenário: conversa nova foi criada sem estágio e agora uma regra de automação
+    // disparou move_to_stage (ou agente moveu via menu de contexto).
+    emitterHandlers[BUS_EVENTS.CONVERSATION_UPDATED]({
+      id: 305,
+      status: 'open',
+      inbox_id: 5,
+      labels: [],
+      unread_count: 1,
+      pipeline_stage_id: 10,
+      pipeline_stage_changed_at: new Date().toISOString(),
+      last_activity_at: Math.floor(Date.now() / 1000),
+      meta: { sender: { name: 'Helen', thumbnail: '' }, assignee: null },
+      messages: [{ content: 'Lead from automation' }],
+    });
+    await flushPromises();
+
+    const columns = wrapper.findAll('[data-testid="column"]');
+    expect(columns[0].attributes('data-conversation-ids')).toBe('305,100,101');
+    expect(mockStageConversations.mock.calls.length).toBe(initialCallCount);
+  });
+
+  it('removes an existing card when updated to no longer match active filters', async () => {
+    const wrapper = mountComponent();
+    await flushPromises();
+
+    // Filtro de status = open
+    const statusComboBox = wrapper.findAllComponents({
+      name: 'TagMultiSelectComboBox',
+    })[1];
+    await statusComboBox.find('div.cursor-pointer').trigger('click');
+    await statusComboBox.findAll('[role="option"]')[0].trigger('click');
+    await flushPromises();
+
+    let columns = wrapper.findAll('[data-testid="column"]');
+    expect(columns[0].attributes('data-conversation-ids')).toBe('100,101');
+
+    // Conversa 100 é resolvida: deve sair da coluna
+    emitterHandlers[BUS_EVENTS.CONVERSATION_UPDATED]({
+      id: 100,
+      status: 'resolved',
+      inbox_id: 5,
+      labels: [],
+      unread_count: 0,
+      pipeline_stage_id: 10,
+      pipeline_stage_changed_at: new Date().toISOString(),
+      last_activity_at: Math.floor(Date.now() / 1000),
+      meta: { sender: { name: 'Alice', thumbnail: '' }, assignee: null },
+      messages: [],
+    });
+    await flushPromises();
+
+    columns = wrapper.findAll('[data-testid="column"]');
+    expect(columns[0].attributes('data-conversation-ids')).toBe('101');
+  });
+
+  it('ignores an updated conversation whose new stage belongs to another pipeline', async () => {
+    const wrapper = mountComponent();
+    await flushPromises();
+
+    // Conversa atualizada com stage 999 que não existe nas colunas deste board
+    emitterHandlers[BUS_EVENTS.CONVERSATION_UPDATED]({
+      id: 306,
+      status: 'open',
+      inbox_id: 5,
+      labels: [],
+      unread_count: 0,
+      pipeline_stage_id: 999,
+      pipeline_stage_changed_at: new Date().toISOString(),
+      last_activity_at: Math.floor(Date.now() / 1000),
+      meta: { sender: { name: 'Ian', thumbnail: '' }, assignee: null },
+      messages: [],
+    });
+    await flushPromises();
+
+    const columns = wrapper.findAll('[data-testid="column"]');
+    expect(columns[0].attributes('data-conversation-ids')).toBe('100,101');
+    expect(columns[1].attributes('data-conversation-ids')).toBe('200');
+  });
 });
+

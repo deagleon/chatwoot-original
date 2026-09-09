@@ -395,8 +395,7 @@ const matchesActiveFilters = data => {
   return true;
 };
 
-const onConversationCreated = data => {
-  const stageId = data.pipeline_stage_id;
+const insertCardToStage = (stageId, data) => {
   if (!stageId || !conversationsByStage[stageId]) return;
 
   const alreadyOnBoard = Object.values(conversationsByStage).some(list =>
@@ -427,6 +426,10 @@ const onConversationCreated = data => {
   sortColumn(stageId);
 };
 
+const onConversationCreated = data => {
+  insertCardToStage(data.pipeline_stage_id, data);
+};
+
 // Real-time: react to conversation.updated events from ActionCable
 const onConversationUpdated = data => {
   const conversationId = data.id;
@@ -436,7 +439,14 @@ const onConversationUpdated = data => {
     const list = conversationsByStage[stage.id];
     return list && list.some(c => c.id === conversationId);
   });
-  if (!fromStage) return;
+
+  // Se a conversa não estava no board (ex.: recém-criada e agora associada a
+  // uma etapa via regra de automação, ou movida a partir da tela de conversa/API),
+  // insere diretamente na coluna da nova etapa.
+  if (!fromStage) {
+    insertCardToStage(newStageId, data);
+    return;
+  }
 
   const list = conversationsByStage[fromStage.id];
   const idx = list.findIndex(c => c.id === conversationId);
@@ -455,15 +465,37 @@ const onConversationUpdated = data => {
     conversationsByStage[fromStage.id] = list.filter(
       c => c.id !== conversationId
     );
+    sortColumn(fromStage.id);
+
     if (conversationsByStage[newStageId]) {
+      if (filters.q) {
+        scheduleCreatedRefetch(newStageId);
+        return;
+      }
+      if (!matchesActiveFilters(data)) return;
+
+      if (loadingByStage[newStageId]) {
+        stageFetchRequestSeq[newStageId] =
+          (stageFetchRequestSeq[newStageId] ?? 0) + 1;
+        scheduleCreatedRefetch(newStageId);
+      }
+
       conversationsByStage[newStageId] = [
         { ...list[idx], ...data },
         ...conversationsByStage[newStageId],
       ];
+      sortColumn(newStageId);
     }
-    sortColumn(newStageId);
-    sortColumn(fromStage.id);
   } else {
+    // Stage não mudou, mas outros atributos (status, assignee, priority, labels)
+    // podem ter sido alterados. Se não corresponder mais aos filtros ativos
+    // (ex.: conversa resolvida quando o filtro é "Abertas"), remove do board.
+    if (!matchesActiveFilters(data)) {
+      conversationsByStage[fromStage.id] = list.filter(
+        c => c.id !== conversationId
+      );
+      return;
+    }
     conversationsByStage[fromStage.id] = list.map(c =>
       c.id === conversationId ? { ...c, ...data } : c
     );
