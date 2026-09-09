@@ -112,6 +112,7 @@ class ActionCableConnector extends BaseActionCableConnector {
     const { id } = payload;
     if (id) {
       this.app.$store.dispatch('updateConversation', payload);
+      emitter.emit(BUS_EVENTS.CONVERSATION_UPDATED, payload);
     }
     this.fetchConversationStats();
   };
@@ -135,12 +136,12 @@ class ActionCableConnector extends BaseActionCableConnector {
       conversation_id: conversationId,
     } = data;
     DashboardAudioNotificationHelper.onNewMessage(data);
-    emitter.emit(BUS_EVENTS.MESSAGE_CREATED, data);
     this.app.$store.dispatch('addMessage', data);
     this.app.$store.dispatch('updateConversationLastActivity', {
       lastActivityAt,
       conversationId,
     });
+    emitter.emit(BUS_EVENTS.MESSAGE_CREATED, data);
   };
 
   // eslint-disable-next-line class-methods-use-this
@@ -148,6 +149,7 @@ class ActionCableConnector extends BaseActionCableConnector {
 
   onStatusChange = data => {
     this.app.$store.dispatch('updateConversation', data);
+    emitter.emit(BUS_EVENTS.CONVERSATION_UPDATED, data);
     this.fetchConversationStats();
   };
 

@@ -67,9 +67,10 @@ const statusClass = computed(() => {
 const daysInStage = computed(() => {
   const changedAt = props.conversation?.pipeline_stage_changed_at;
   if (!changedAt) return null;
-  const diff = Date.now() - new Date(changedAt).getTime();
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-  if (days === 0) return t('PIPELINES.BOARD.CARD.TODAY_IN_STAGE');
+  const time = Date.parse(changedAt);
+  if (Number.isNaN(time)) return null;
+  const days = Math.floor((Date.now() - time) / 86400000);
+  if (days <= 0) return t('PIPELINES.BOARD.CARD.TODAY_IN_STAGE');
   return t('PIPELINES.BOARD.CARD.DAYS_IN_STAGE', { days });
 });
 
@@ -212,7 +213,7 @@ const onKeydown = e => {
     tabindex="0"
     role="button"
     :aria-label="ariaLabel"
-    class="flex flex-col gap-2 p-3 rounded-lg bg-n-solid-1 border border-n-weak cursor-grab hover:border-n-strong transition-colors duration-150 motion-reduce:transition-none focus:outline-none focus:ring-2 focus:ring-n-brand"
+    class="flex flex-col gap-2 p-3 rounded-lg bg-n-solid-1 border border-n-weak cursor-grab hover:border-n-strong transition-colors duration-150 motion-reduce:transition-none focus:outline-none focus:ring-2 focus:ring-n-brand [contain:layout_style]"
     @dragstart="onDragStart"
     @click="emit('open', conversation)"
     @contextmenu="openContextMenu"

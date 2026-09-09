@@ -1,6 +1,8 @@
 import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest';
 import ActionCableConnector from '../actionCable';
 import { FEATURE_FLAGS } from 'dashboard/featureFlags';
+import { emitter } from 'shared/helpers/mitt';
+import { BUS_EVENTS } from 'shared/constants/busEvents';
 
 vi.mock('shared/helpers/mitt', () => ({
   emitter: {
@@ -12,6 +14,12 @@ vi.mock('dashboard/composables/useImpersonation', () => ({
   useImpersonation: () => ({
     isImpersonating: { value: false },
   }),
+}));
+
+vi.mock('../AudioAlerts/DashboardAudioNotificationHelper', () => ({
+  default: {
+    onNewMessage: vi.fn(),
+  },
 }));
 
 global.chatwootConfig = {
@@ -375,6 +383,56 @@ describe('ActionCableConnector - Copilot Tests', () => {
 
       vi.advanceTimersByTime(4000);
       expect(mockDispatch).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('real-time conversation and message events', () => {
+    it('emits CONVERSATION_CREATED when conversation.created arrives', () => {
+      const data = { id: 10, account_id: 1, pipeline_stage_id: 2 };
+      actionCable.onReceived({
+        event: 'conversation.created',
+        data,
+      });
+
+      expect(mockDispatch).toHaveBeenCalledWith('addConversation', data);
+      expect(emitter.emit).toHaveBeenCalledWith(
+        BUS_EVENTS.CONVERSATION_CREATED,
+        data
+      );
+    });
+
+    it('emits CONVERSATION_UPDATED when conversation.updated arrives', () => {
+      const data = { id: 10, account_id: 1, pipeline_stage_id: 3 };
+      actionCable.onReceived({
+        event: 'conversation.updated',
+        data,
+      });
+
+      expect(mockDispatch).toHaveBeenCalledWith('updateConversation', data);
+      expect(emitter.emit).toHaveBeenCalledWith(
+        BUS_EVENTS.CONVERSATION_UPDATED,
+        data
+      );
+    });
+
+    it('emits MESSAGE_CREATED when message.created arrives', () => {
+      const data = {
+        id: 100,
+        account_id: 1,
+        conversation_id: 10,
+        content: 'Hello',
+        conversation: { last_activity_at: 123456 },
+      };
+      actionCable.onReceived({
+        event: 'message.created',
+        data,
+      });
+
+      expect(mockDispatch).toHaveBeenCalledWith('addMessage', data);
+      expect(emitter.emit).toHaveBeenCalledWith(
+        BUS_EVENTS.MESSAGE_CREATED,
+        data
+      );
     });
   });
 });

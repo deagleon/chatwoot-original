@@ -52,9 +52,19 @@ const props = defineProps({
     type: String,
     default: 'lg',
     validator: value =>
-      ['7xl', '6xl', '5xl', '3xl', '2xl', 'xl', 'lg', 'md', 'sm'].includes(
-        value
-      ),
+      [
+        'full',
+        '7xl',
+        '6xl',
+        '5xl',
+        '4xl',
+        '3xl',
+        '2xl',
+        'xl',
+        'lg',
+        'md',
+        'sm',
+      ].includes(value),
   },
   position: {
     type: String,
@@ -76,9 +86,11 @@ const titleId = useId();
 
 const maxWidthClass = computed(() => {
   const classesMap = {
+    full: 'max-w-[95vw]',
     '7xl': 'max-w-7xl',
     '6xl': 'max-w-6xl',
     '5xl': 'max-w-5xl',
+    '4xl': 'max-w-4xl',
     '3xl': 'max-w-3xl',
     '2xl': 'max-w-2xl',
     xl: 'max-w-xl',
@@ -128,7 +140,7 @@ defineExpose({ open, close });
     <dialog
       ref="dialogRef"
       :aria-labelledby="title ? titleId : undefined"
-      class="w-full transition-all duration-300 ease-in-out shadow-xl rounded-xl"
+      class="w-full transition-all duration-300 ease-in-out shadow-xl rounded-xl max-h-[92vh]"
       :class="[
         maxWidthClass,
         positionClass,
@@ -139,18 +151,18 @@ defineExpose({ open, close });
       <OnClickOutside @trigger="handleClickOutside">
         <form
           ref="dialogContentRef"
-          class="flex flex-col w-full h-auto gap-6 p-6 overflow-visible text-start align-middle transition-all duration-300 ease-in-out transform bg-n-alpha-3 backdrop-blur-[100px] shadow-xl rounded-xl"
+          class="flex flex-col w-full h-auto gap-6 p-6 overflow-visible text-start align-middle transition-all duration-300 ease-in-out transform bg-n-alpha-3 backdrop-blur-[100px] shadow-xl rounded-xl max-h-[92vh]"
           @submit.prevent="confirm"
           @click.stop
         >
           <div
             v-if="title || description || $slots.headerActions"
-            class="flex items-start justify-between gap-3"
+            class="flex items-center justify-between gap-4"
           >
-            <div class="flex flex-col flex-1 min-w-0 gap-2">
+            <div class="flex flex-col gap-2 min-w-0 flex-1">
               <h3
                 :id="titleId"
-                class="text-base font-medium leading-6 text-n-slate-12"
+                class="text-base font-medium leading-6 text-n-slate-12 truncate"
               >
                 {{ title }}
               </h3>
@@ -160,11 +172,9 @@ defineExpose({ open, close });
                 </p>
               </slot>
             </div>
-            <!-- Optional actions rendered beside the title (e.g. panel
-                 toggles in the pipeline board preview) -->
             <div
               v-if="$slots.headerActions"
-              class="flex items-center gap-1 shrink-0"
+              class="flex items-center gap-2 flex-shrink-0"
             >
               <slot name="headerActions" />
             </div>
