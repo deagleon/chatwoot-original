@@ -359,7 +359,7 @@ describe Conversations::FilterService do
       it 'treats AgentBot-owned conversations as having an assignee' do
         account.conversations.destroy_all
         agent_bot = create(:agent_bot, account: account)
-        bot_owned_conversation = create(:conversation, account: account, inbox: inbox, assignee_agent_bot: agent_bot)
+        bot_owned_conversation = create(:conversation, account: account, inbox: inbox, ai_assignee: agent_bot)
         human_owned_conversation = create(:conversation, account: account, inbox: inbox, assignee: user_1)
         create(:conversation, account: account, inbox: inbox)
 
@@ -380,7 +380,7 @@ describe Conversations::FilterService do
       it 'excludes AgentBot-owned conversations from assignee is not present' do
         account.conversations.destroy_all
         agent_bot = create(:agent_bot, account: account)
-        create(:conversation, account: account, inbox: inbox, assignee_agent_bot: agent_bot)
+        create(:conversation, account: account, inbox: inbox, ai_assignee: agent_bot)
         unassigned_conversation = create(:conversation, account: account, inbox: inbox)
 
         params[:payload] = [{
@@ -406,7 +406,7 @@ describe Conversations::FilterService do
               user_1.id,
               user_2.id
             ],
-            query_operator: 'INVALID',
+            query_operator: nil,
             custom_attribute_type: ''
           }.with_indifferent_access,
           {
@@ -414,6 +414,24 @@ describe Conversations::FilterService do
             filter_operator: 'is_present',
             values: [],
             query_operator: nil,
+            custom_attribute_type: ''
+          }.with_indifferent_access
+        ]
+
+        [' ', false, 7].each do |invalid_query_operator|
+          params[:payload].first[:query_operator] = invalid_query_operator
+
+          expect { filter_service.new(params, user_1, account).perform }.to raise_error(CustomExceptions::CustomFilter::InvalidQueryOperator)
+        end
+      end
+
+      it 'rejects a query operator on the final condition' do
+        params[:payload] = [
+          {
+            attribute_key: 'status',
+            filter_operator: 'equal_to',
+            values: ['open'],
+            query_operator: 'AND',
             custom_attribute_type: ''
           }.with_indifferent_access
         ]
@@ -426,6 +444,28 @@ describe Conversations::FilterService do
   describe '#perform on custom attribute' do
     context 'with query present' do
       let!(:params) { { payload: [], page: 1 } }
+
+      it 'filters custom date attributes by days before' do
+        en_conversation_1.update!(
+          custom_attributes: en_conversation_1.custom_attributes.merge('conversation_created' => (Time.zone.today - 4.days).to_s)
+        )
+        en_conversation_2.update!(
+          custom_attributes: en_conversation_2.custom_attributes.merge('conversation_created' => (Time.zone.today - 2.days).to_s)
+        )
+        params[:payload] = [
+          {
+            attribute_key: 'conversation_created',
+            filter_operator: 'days_before',
+            values: [3],
+            query_operator: nil
+          }.with_indifferent_access
+        ]
+
+        result = filter_service.new(params, user_1, account).perform
+
+        expect(result[:conversations].pluck(:id)).to include(en_conversation_1.id)
+        expect(result[:conversations].pluck(:id)).not_to include(en_conversation_2.id)
+      end
 
       it 'filter by custom_attributes and labels' do
         user_2_assigned_conversation.update_labels('support')
@@ -481,6 +521,19 @@ describe Conversations::FilterService do
         result = filter_service.new(params, user_1, account).perform
         expect(result[:conversations].length).to be 1
         expect(result[:conversations][0][:id]).to be user_2_assigned_conversation.id
+      end
+
+      it 'rejects invalid filter values' do
+        [[{ id: 1 }], [1], 'open'].each do |invalid_values|
+          params[:payload] = [
+            ActionController::Parameters.new(
+              attribute_key: 'status', filter_operator: 'equal_to', values: invalid_values, query_operator: nil
+            ).permit!
+          ]
+
+          expect { filter_service.new(params, user_1, account).perform }
+            .to raise_error(CustomExceptions::CustomFilter::InvalidValue)
+        end
       end
 
       it 'filter by custom_attributes' do
@@ -793,7 +846,7 @@ describe Conversations::FilterService do
     end
 
     it 'counts conversations owned by an agent bot as assigned' do
-      create(:conversation, account: account, inbox: inbox, assignee_agent_bot: create(:agent_bot, account: account))
+      create(:conversation, account: account, inbox: inbox, ai_assignee: create(:agent_bot, account: account))
       params[:payload] = payload
 
       result = filter_service.new(params, user_1, account).perform

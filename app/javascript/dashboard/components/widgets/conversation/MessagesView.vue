@@ -13,6 +13,7 @@ import Banner from 'dashboard/components/ui/Banner.vue';
 import Spinner from 'dashboard/components-next/spinner/Spinner.vue';
 import ResizableEditorWrapper from './ResizableEditorWrapper.vue';
 import ScheduledMessagesTimeline from './scheduled_messages/ScheduledMessagesTimeline.vue';
+import ReferralBubble from 'dashboard/components-next/Conversation/ReferralBubble.vue';
 
 // stores and apis
 import { mapGetters } from 'vuex';
@@ -50,6 +51,7 @@ export default {
     Spinner,
     ResizableEditorWrapper,
     ScheduledMessagesTimeline,
+    ReferralBubble,
   },
   mixins: [inboxMixin],
   setup() {
@@ -149,6 +151,9 @@ export default {
         return filterDuplicateSourceMessages(messages);
       }
       return messages;
+    },
+    referralData() {
+      return this.currentChat?.additional_attributes?.referral || null;
     },
     readMessages() {
       return getReadMessages(
@@ -518,6 +523,7 @@ export default {
             <Spinner v-if="shouldShowSpinner" class="text-n-brand" />
           </li>
         </transition>
+        <ReferralBubble v-if="referralData" :referral="referralData" />
       </template>
       <template #unreadBadge>
         <li

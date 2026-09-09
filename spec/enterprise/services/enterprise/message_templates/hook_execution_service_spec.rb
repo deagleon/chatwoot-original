@@ -143,21 +143,25 @@ RSpec.describe MessageTemplates::HookExecutionService do
         expect(Captain::Conversation::ResponseBuilderJob).to have_received(:perform_later).with(conversation, assistant, message.id)
       end
 
-      it 'emits the engagement event when captain V2 is enabled' do
+      it 'records a conversation outcome when captain V2 is enabled' do
         account.enable_features!('captain_integration_v2')
 
-        expect(Captain::ConversationEvents).to receive(:engaged)
-          .with(conversation: conversation, assistant: assistant, at: kind_of(Time))
+        expect do
+          create(:message, conversation: conversation, message_type: :incoming, account: account)
+        end.to change(ConversationOutcome, :count).by(1)
 
-        create(:message, conversation: conversation, message_type: :incoming, account: account)
+        expect(ConversationOutcome.last).to have_attributes(
+          assistant: assistant,
+          conversation: conversation
+        )
       end
 
-      it 'does not emit the engagement event when captain V2 is disabled' do
+      it 'does not record a conversation outcome when captain V2 is disabled' do
         account.disable_features!('captain_integration_v2')
 
-        expect(Captain::ConversationEvents).not_to receive(:engaged)
-
-        create(:message, conversation: conversation, message_type: :incoming, account: account)
+        expect do
+          create(:message, conversation: conversation, message_type: :incoming, account: account)
+        end.not_to change(ConversationOutcome, :count)
       end
     end
 
@@ -181,9 +185,7 @@ RSpec.describe MessageTemplates::HookExecutionService do
         expect(conversation.reload.status).to eq('open')
       end
 
-      it 'emits a usage limit handoff event when captain V2 is enabled' do
-        account.enable_features!('captain_integration_v2')
-
+      it 'emits a usage limit handoff event' do
         expect(Captain::ConversationEvents).to receive(:handed_off)
           .with(conversation: conversation, assistant: assistant, source: 'usage_limit', reason_category: :usage_limit, at: kind_of(Time))
 
@@ -196,6 +198,27 @@ RSpec.describe MessageTemplates::HookExecutionService do
         expect(Captain::ConversationEvents).not_to receive(:handed_off)
 
         create(:message, conversation: conversation, message_type: :incoming, account: account)
+      end
+
+      it 'records the handoff on the outcome when captain V2 is enabled' do
+        account.enable_features!('captain_integration_v2')
+
+        expect do
+          create(:message, conversation: conversation, message_type: :incoming, account: account)
+        end.to change(ConversationOutcome, :count).by(1)
+
+        expect(ConversationOutcome.last).to have_attributes(
+          handoff_reason_category: 'usage_limit',
+          handoff_at: be_present
+        )
+      end
+
+      it 'does not record an outcome when captain V2 is disabled' do
+        account.disable_features!('captain_integration_v2')
+
+        expect do
+          create(:message, conversation: conversation, message_type: :incoming, account: account)
+        end.not_to change(ConversationOutcome, :count)
       end
     end
   end
@@ -231,6 +254,14 @@ RSpec.describe MessageTemplates::HookExecutionService do
       expect(Captain::Conversation::ResponseBuilderJob).not_to receive(:perform_later)
 
       create(:message, conversation: conversation, message_type: :incoming, account: account)
+    end
+
+    it 'still records the conversation as eligible demand when captain V2 is enabled' do
+      account.enable_features!('captain_integration_v2')
+
+      expect do
+        create(:message, conversation: conversation, message_type: :incoming, account: account)
+      end.to change(ConversationOutcome, :count).by(1)
     end
   end
 
