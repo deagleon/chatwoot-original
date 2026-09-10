@@ -9,7 +9,7 @@ import { useMapGetter } from 'dashboard/composables/store';
 
 defineProps({
   to: {
-    type: String,
+    type: [String, Object],
     default: 'body',
   },
 });
@@ -20,7 +20,7 @@ const contentDirection = computed(() => (isRTL.value ? 'rtl' : 'ltr'));
 </script>
 
 <template>
-  <Teleport :to="to">
+  <Teleport :to="to || 'body'">
     <div :dir="contentDirection">
       <slot />
     </div>

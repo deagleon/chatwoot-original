@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch, useSlots, useTemplateRef } from 'vue';
+import { computed, ref, watch, useSlots, useTemplateRef, onMounted } from 'vue';
 import {
   useElementBounding,
   useResizeObserver,
@@ -59,6 +59,16 @@ const selectedIndex = ref(0);
 const caretAnchor = useElementBounding(caretAnchorRef);
 const { width: windowWidth, height: windowHeight } = useWindowSize();
 const isRTL = useMapGetter('accounts/isRTL');
+
+const dialogTarget = ref(null);
+
+onMounted(() => {
+  dialogTarget.value = caretAnchorRef.value?.closest('dialog') || null;
+});
+
+const teleportTarget = computed(
+  () => dialogTarget.value || caretAnchorRef.value?.closest('dialog') || 'body'
+);
 
 const items = computed(() => props.items);
 
@@ -179,7 +189,7 @@ watch(items, () => {
     class="absolute inset-x-0 pointer-events-none"
     :style="caretAnchorStyle"
   />
-  <TeleportWithDirection to="body">
+  <TeleportWithDirection :to="teleportTarget">
     <PreviewPicker
       ref="pickerRef"
       v-model:selected-index="selectedIndex"

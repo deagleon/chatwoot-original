@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch, nextTick } from 'vue';
+import { ref, computed, watch, nextTick, onMounted } from 'vue';
 import { vOnClickOutside } from '@vueuse/components';
 import {
   useBreakpoints,
@@ -36,6 +36,16 @@ const isActive = ref(false);
 const triggerRef = ref(null);
 const popoverRef = ref(null);
 const mobileContentRef = ref(null);
+
+const dialogTarget = ref(null);
+
+onMounted(() => {
+  dialogTarget.value = triggerRef.value?.closest('dialog') || null;
+});
+
+const teleportTarget = computed(
+  () => dialogTarget.value || triggerRef.value?.closest('dialog') || 'body'
+);
 
 const breakpoints = useBreakpoints(breakpointsTailwind);
 const belowMd = breakpoints.smaller('md');
@@ -136,7 +146,7 @@ defineExpose({ show, hide, toggle });
     <slot :is-open="isActive" />
   </span>
 
-  <TeleportWithDirection to="body">
+  <TeleportWithDirection :to="teleportTarget">
     <!-- Mobile: centered modal with backdrop -->
     <div
       v-if="isActive && isMobile"

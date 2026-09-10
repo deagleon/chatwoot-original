@@ -123,7 +123,14 @@ const handleDialogClose = e => e.target === dialogRef.value && close();
 
 // Only close on click-outside if this dialog is the topmost one.
 // If another dialog (e.g. ProseMirror prompt) is open on top, ignore.
-const handleClickOutside = () => {
+const handleClickOutside = event => {
+  if (
+    event?.target?.closest?.(
+      '[data-popover-content], [data-floating-ui], [role="listbox"], [role="menu"]'
+    )
+  ) {
+    return;
+  }
   const dialogs = document.querySelectorAll('dialog[open]');
   if (dialogs[dialogs.length - 1] === dialogRef.value) close();
 };
@@ -148,7 +155,17 @@ defineExpose({ open, close });
       ]"
       @close.prevent="handleDialogClose"
     >
-      <OnClickOutside @trigger="handleClickOutside">
+      <OnClickOutside
+        :options="{
+          ignore: [
+            '[data-popover-content]',
+            '[data-floating-ui]',
+            '[role=listbox]',
+            '[role=menu]',
+          ],
+        }"
+        @trigger="handleClickOutside"
+      >
         <form
           ref="dialogContentRef"
           class="flex flex-col w-full h-auto gap-6 p-6 overflow-visible text-start align-middle transition-all duration-300 ease-in-out transform bg-n-alpha-3 backdrop-blur-[100px] shadow-xl rounded-xl max-h-[92vh]"
