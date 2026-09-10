@@ -2,17 +2,19 @@
 #
 # Table name: pipelines
 #
-#  id          :bigint           not null, primary key
-#  archived_at :datetime
-#  name        :string           not null
-#  created_at  :datetime         not null
-#  updated_at  :datetime         not null
-#  account_id  :bigint           not null
+#  id              :bigint           not null, primary key
+#  archived_at     :datetime
+#  name            :string           not null
+#  created_at      :datetime         not null
+#  updated_at      :datetime         not null
+#  account_id      :bigint           not null
+#  trello_board_id :string
 #
 # Indexes
 #
-#  index_pipelines_on_account_id   (account_id)
-#  index_pipelines_on_archived_at  (archived_at)
+#  index_pipelines_on_account_id                      (account_id)
+#  index_pipelines_on_account_id_and_trello_board_id  (account_id,trello_board_id) UNIQUE WHERE (trello_board_id IS NOT NULL)
+#  index_pipelines_on_archived_at                     (archived_at)
 #
 class Pipeline < ApplicationRecord
   DEFAULT_STAGES = [

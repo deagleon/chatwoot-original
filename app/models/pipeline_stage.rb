@@ -2,17 +2,19 @@
 #
 # Table name: pipeline_stages
 #
-#  id          :bigint           not null, primary key
-#  color       :string
-#  name        :string           not null
-#  position    :integer          not null
-#  created_at  :datetime         not null
-#  updated_at  :datetime         not null
-#  pipeline_id :bigint           not null
+#  id             :bigint           not null, primary key
+#  color          :string
+#  name           :string           not null
+#  position       :integer          not null
+#  created_at     :datetime         not null
+#  updated_at     :datetime         not null
+#  pipeline_id    :bigint           not null
+#  trello_list_id :string
 #
 # Indexes
 #
-#  index_pipeline_stages_on_pipeline_id  (pipeline_id)
+#  index_pipeline_stages_on_pipeline_id                     (pipeline_id)
+#  index_pipeline_stages_on_pipeline_id_and_trello_list_id  (pipeline_id,trello_list_id) UNIQUE WHERE (trello_list_id IS NOT NULL)
 #
 class PipelineStage < ApplicationRecord
   belongs_to :pipeline

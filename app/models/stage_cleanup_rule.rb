@@ -16,6 +16,11 @@
 #  index_stage_cleanup_rules_on_account_id         (account_id)
 #  index_stage_cleanup_rules_on_pipeline_stage_id  (pipeline_stage_id)
 #
+# Foreign Keys
+#
+#  fk_rails_...  (account_id => accounts.id) ON DELETE => cascade
+#  fk_rails_...  (pipeline_stage_id => pipeline_stages.id) ON DELETE => cascade
+#
 class StageCleanupRule < ApplicationRecord
   TIME_FORMAT = /\A([01]\d|2[0-3]):[0-5]\d\z/
 
