@@ -22,6 +22,7 @@
 # Ignore Byebug command history file.
 .byebug_history
 .DS_Store
+.zcode/
 *.log
 # Ignore application configuration
 node_modules
