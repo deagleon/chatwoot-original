@@ -15,13 +15,6 @@ RSpec.describe Captain::Tasks::ReplySuggestionJob, type: :job do
   let(:mock_chat) { instance_double(RubyLLM::Chat) }
   let(:mock_context) { instance_double(RubyLLM::Context, chat: mock_chat) }
 
-  around do |example|
-    previous_cache = Rails.cache
-    Rails.cache = ActiveSupport::Cache::MemoryStore.new
-    example.run
-    Rails.cache = previous_cache
-  end
-
   before do
     account.enable_features!('captain_tasks')
     InstallationConfig.find_or_initialize_by(name: 'CAPTAIN_OPEN_AI_API_KEY').update!(value: 'test-key')
@@ -44,12 +37,16 @@ RSpec.describe Captain::Tasks::ReplySuggestionJob, type: :job do
     )
   end
 
+  def read_payload
+    JSON.parse(Redis::Alfred.get(cache_key))
+  end
+
   it 'writes the completed payload to the cache' do
     perform_job
 
-    payload = Rails.cache.read(cache_key)
-    expect(payload[:status]).to eq('completed')
-    expect(payload[:message]).to eq('Sure, I can help!')
+    payload = read_payload
+    expect(payload['status']).to eq('completed')
+    expect(payload['message']).to eq('Sure, I can help!')
   end
 
   it 'writes a friendly failure payload when the LLM times out' do
@@ -57,9 +54,9 @@ RSpec.describe Captain::Tasks::ReplySuggestionJob, type: :job do
 
     perform_job
 
-    payload = Rails.cache.read(cache_key)
-    expect(payload[:status]).to eq('failed')
-    expect(payload[:error]).to eq(I18n.t('captain.timeout'))
+    payload = read_payload
+    expect(payload['status']).to eq('failed')
+    expect(payload['error']).to eq(I18n.t('captain.timeout'))
   end
 
   it 'writes a failure payload instead of raising when records are gone' do
@@ -72,6 +69,6 @@ RSpec.describe Captain::Tasks::ReplySuggestionJob, type: :job do
       )
     end.not_to raise_error
 
-    expect(Rails.cache.read(cache_key)[:status]).to eq('failed')
+    expect(read_payload['status']).to eq('failed')
   end
 end

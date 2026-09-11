@@ -8,14 +8,6 @@ RSpec.describe 'Api::V1::Accounts::Captain::Tasks', type: :request do
   let(:inbox) { create(:inbox, account: account) }
   let(:conversation) { create(:conversation, account: account, inbox: inbox) }
 
-  # Test env uses :null_store; swap in a real store so job payloads are observable.
-  around do |example|
-    previous_cache = Rails.cache
-    Rails.cache = ActiveSupport::Cache::MemoryStore.new
-    example.run
-    Rails.cache = previous_cache
-  end
-
   before do
     account.enable_features!('captain_tasks')
     InstallationConfig.find_or_initialize_by(name: 'CAPTAIN_OPEN_AI_API_KEY').update!(value: 'test-key')

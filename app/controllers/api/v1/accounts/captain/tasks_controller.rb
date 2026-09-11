@@ -37,14 +37,15 @@ class Api::V1::Accounts::Captain::TasksController < Api::V1::Accounts::BaseContr
 
   def reply_suggestion_status
     cache_key = Captain::Tasks::ReplySuggestionJob.cache_key_for(params[:task_id])
-    payload = Rails.cache.read(cache_key)
-    return render json: { status: 'pending' }, status: :accepted if payload.nil?
+    raw_payload = Redis::Alfred.get(cache_key)
+    return render json: { status: 'pending' }, status: :accepted if raw_payload.nil?
 
-    Rails.cache.delete(cache_key)
-    if payload[:error]
-      render json: { error: payload[:error] }, status: :unprocessable_content
+    Redis::Alfred.delete(cache_key)
+    payload = JSON.parse(raw_payload)
+    if payload['error']
+      render json: { error: payload['error'] }, status: :unprocessable_content
     else
-      render json: { message: payload[:message], follow_up_context: payload[:follow_up_context] }.compact
+      render json: { message: payload['message'], follow_up_context: payload['follow_up_context'] }.compact
     end
   end
 
