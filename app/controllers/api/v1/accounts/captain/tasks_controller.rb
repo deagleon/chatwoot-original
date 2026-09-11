@@ -22,13 +22,30 @@ class Api::V1::Accounts::Captain::TasksController < Api::V1::Accounts::BaseContr
   end
 
   def reply_suggestion
-    result = Captain::ReplySuggestionService.new(
-      account: Current.account,
-      conversation_display_id: params[:conversation_display_id],
-      user: Current.user
-    ).perform
+    conversation = Current.account.conversations.find_by(display_id: params[:conversation_display_id])
+    return render json: { error: I18n.t('captain.conversation_not_found') }, status: :unprocessable_content if conversation.nil?
 
-    render_result(result)
+    task_id = SecureRandom.uuid
+    Captain::Tasks::ReplySuggestionJob.perform_later(
+      account_id: Current.account.id,
+      conversation_display_id: conversation.display_id,
+      user_id: Current.user.id,
+      task_id: task_id
+    )
+    render json: { task_id: task_id }, status: :accepted
+  end
+
+  def reply_suggestion_status
+    cache_key = Captain::Tasks::ReplySuggestionJob.cache_key_for(params[:task_id])
+    payload = Rails.cache.read(cache_key)
+    return render json: { status: 'pending' }, status: :accepted if payload.nil?
+
+    Rails.cache.delete(cache_key)
+    if payload[:error]
+      render json: { error: payload[:error] }, status: :unprocessable_content
+    else
+      render json: { message: payload[:message], follow_up_context: payload[:follow_up_context] }.compact
+    end
   end
 
   def label_suggestion

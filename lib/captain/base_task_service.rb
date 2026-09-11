@@ -70,10 +70,21 @@ class Captain::BaseTaskService
     InstallationConfig.find_by(name: 'CAPTAIN_OPEN_AI_MODEL')&.value
   end
 
+  # Override point: scopes that tolerate slower responses (e.g. background
+  # jobs outside the rack-timeout wall) raise this instead of failing fast.
+  def request_timeout
+    12
+  end
+
+  # Override point for bounding completion size per task type.
+  def chat_params
+    {}
+  end
+
   def execute_ruby_llm_request(model:, messages:, schema: nil, tools: [])
     credential = llm_credential
 
-    Llm::Config.with_api_key(credential[:api_key], api_base: api_base) do |context|
+    Llm::Config.with_api_key(credential[:api_key], api_base: api_base, request_timeout: request_timeout) do |context|
       chat = build_chat(context, model: model, messages: messages, schema: schema, tools: tools)
 
       conversation_messages = messages.reject { |m| m[:role] == 'system' }
@@ -82,6 +93,9 @@ class Captain::BaseTaskService
       add_messages_if_needed(chat, conversation_messages)
       build_ruby_llm_response(chat.ask(conversation_messages.last[:content]), messages)
     end
+  rescue Faraday::TimeoutError, Timeout::Error => e
+    capture_llm_exception(e, credential: credential)
+    { error: I18n.t('captain.timeout'), request_messages: messages }
   rescue StandardError => e
     capture_llm_exception(e, credential: credential)
     { error: e.message, request_messages: messages }
@@ -89,6 +103,8 @@ class Captain::BaseTaskService
 
   def build_chat(context, model:, messages:, schema: nil, tools: [])
     chat = Llm::Config.chat(context: context, model: model)
+    extra_params = chat_params
+    chat.with_params(**extra_params) if extra_params.any?
     system_msg = messages.find { |m| m[:role] == 'system' }
     chat.with_instructions(system_msg[:content]) if system_msg
     chat.with_schema(schema) if schema

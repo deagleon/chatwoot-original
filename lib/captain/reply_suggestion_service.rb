@@ -1,7 +1,13 @@
 class Captain::ReplySuggestionService < Captain::BaseTaskService
+  # Generous ceiling for a chat reply: clips pathological completions,
+  # bounding tail latency and cost per generation.
+  REPLY_SUGGESTION_MAX_TOKENS = 1000
+
   pattr_initialize [:account!, :conversation_display_id!, :user!]
 
   def perform
+    return { error: I18n.t('captain.conversation_not_found') } if conversation.nil?
+
     make_api_call(
       feature: 'editor',
       messages: [
@@ -12,6 +18,10 @@ class Captain::ReplySuggestionService < Captain::BaseTaskService
   end
 
   private
+
+  def chat_params
+    { max_tokens: REPLY_SUGGESTION_MAX_TOKENS }
+  end
 
   def system_prompt
     template = prompt_from_file('reply')

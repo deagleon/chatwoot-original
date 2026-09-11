@@ -8,6 +8,11 @@ RSpec.describe Captain::ReplySuggestionService do
   let(:inbox) { create(:inbox, account: account) }
   let(:conversation) { create(:conversation, account: account, inbox: inbox) }
   let(:captured_messages) { [] }
+  let(:mock_response) do
+    instance_double(RubyLLM::Message, content: 'Sure, I can help!', input_tokens: 50, output_tokens: 20)
+  end
+  let(:mock_chat) { instance_double(RubyLLM::Chat) }
+  let(:mock_context) { instance_double(RubyLLM::Context, chat: mock_chat) }
 
   before do
     create(:installation_config, name: 'CAPTAIN_OPEN_AI_API_KEY', value: 'test-key')
@@ -15,11 +20,8 @@ RSpec.describe Captain::ReplySuggestionService do
     allow(account).to receive(:feature_enabled?).and_call_original
     allow(account).to receive(:feature_enabled?).with('captain_tasks').and_return(true)
 
-    mock_response = instance_double(RubyLLM::Message, content: 'Sure, I can help!', input_tokens: 50, output_tokens: 20)
-    mock_chat = instance_double(RubyLLM::Chat)
-    mock_context = instance_double(RubyLLM::Context, chat: mock_chat)
-
     allow(Llm::Config).to receive(:with_api_key).and_yield(mock_context)
+    allow(mock_chat).to receive(:with_params).and_return(mock_chat)
     allow(mock_chat).to receive(:with_tool).and_return(mock_chat)
     allow(mock_chat).to receive(:on_end_message).and_return(mock_chat)
     allow(mock_chat).to receive(:with_instructions) { |msg| captured_messages << { role: 'system', content: msg } }
@@ -41,6 +43,12 @@ RSpec.describe Captain::ReplySuggestionService do
       result = service.perform
 
       expect(result[:message]).to eq('Sure, I can help!')
+    end
+
+    it 'bounds the completion size' do
+      service.perform
+
+      expect(mock_chat).to have_received(:with_params).with(max_tokens: described_class::REPLY_SUGGESTION_MAX_TOKENS)
     end
 
     it 'formats conversation using LlmFormatter' do

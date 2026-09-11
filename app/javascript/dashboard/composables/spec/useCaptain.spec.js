@@ -105,17 +105,59 @@ describe('useCaptain', () => {
 
   it('gets reply suggestion', async () => {
     TasksAPI.replySuggestion.mockResolvedValue({
-      data: { message: 'Reply suggestion', follow_up_context: { id: 'ctx3' } },
+      data: { task_id: 'task-1' },
+    });
+    TasksAPI.replySuggestionStatus.mockResolvedValue({
+      data: {
+        status: 'completed',
+        message: 'Reply suggestion',
+        follow_up_context: { id: 'ctx3' },
+      },
     });
 
     const { getReplySuggestion } = useCaptain();
     const result = await getReplySuggestion({});
 
     expect(TasksAPI.replySuggestion).toHaveBeenCalledWith('123', undefined);
+    expect(TasksAPI.replySuggestionStatus).toHaveBeenCalledWith(
+      'task-1',
+      undefined
+    );
     expect(result).toEqual({
       message: 'Reply suggestion',
       followUpContext: { id: 'ctx3' },
     });
+  });
+
+  it('polls until the reply suggestion completes', async () => {
+    TasksAPI.replySuggestion.mockResolvedValue({
+      data: { task_id: 'task-1' },
+    });
+    TasksAPI.replySuggestionStatus
+      .mockResolvedValueOnce({ data: { status: 'pending' } })
+      .mockResolvedValue({
+        data: { status: 'completed', message: 'Late reply' },
+      });
+
+    const { getReplySuggestion } = useCaptain();
+    const result = await getReplySuggestion({});
+
+    expect(TasksAPI.replySuggestionStatus).toHaveBeenCalledTimes(2);
+    expect(result).toEqual({ message: 'Late reply' });
+  });
+
+  it('returns an error when the reply suggestion task fails', async () => {
+    TasksAPI.replySuggestion.mockResolvedValue({
+      data: { task_id: 'task-1' },
+    });
+    TasksAPI.replySuggestionStatus.mockResolvedValue({
+      data: { status: 'failed', error: 'Timed out, try again' },
+    });
+
+    const { getReplySuggestion } = useCaptain();
+    const result = await getReplySuggestion({});
+
+    expect(result).toEqual({ message: '', errorType: 'http_422' });
   });
 
   it('sends follow-up message', async () => {

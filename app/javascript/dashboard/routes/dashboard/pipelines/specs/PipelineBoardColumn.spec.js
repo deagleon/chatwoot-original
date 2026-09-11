@@ -138,4 +138,59 @@ describe('PipelineBoardColumn', () => {
 
     expect(dragOverEvent.dataTransfer.dropEffect).toBe('move');
   });
+
+  it('emits load-more when the sentinel intersects near the end', async () => {
+    // Scroll infinito: o sentinel observa com rootMargin 400px e dispara o
+    // `load-more` existente; o botão continua como fallback.
+    const callbacks = [];
+    const observe = vi.fn();
+    const disconnect = vi.fn();
+    vi.stubGlobal(
+      'IntersectionObserver',
+      vi.fn(cb => {
+        callbacks.push(cb);
+        return { observe, disconnect };
+      })
+    );
+    try {
+      const wrapper = mountColumn({ conversations, hasMore: true });
+      expect(observe).toHaveBeenCalledTimes(1);
+
+      callbacks[0]([{ isIntersecting: true }]);
+      expect(wrapper.emitted('load-more')).toHaveLength(1);
+      expect(wrapper.emitted('load-more')[0]).toEqual([10]);
+
+      wrapper.unmount();
+      expect(disconnect).toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('does not emit load-more from the sentinel while loading or without more pages', async () => {
+    const callbacks = [];
+    const observe = vi.fn();
+    vi.stubGlobal(
+      'IntersectionObserver',
+      vi.fn(cb => {
+        callbacks.push(cb);
+        return { observe, disconnect: vi.fn() };
+      })
+    );
+    try {
+      const loadingWrapper = mountColumn({
+        conversations,
+        hasMore: true,
+        loading: true,
+      });
+      callbacks[callbacks.length - 1]([{ isIntersecting: true }]);
+      expect(loadingWrapper.emitted('load-more')).toBeUndefined();
+
+      const doneWrapper = mountColumn({ conversations, hasMore: false });
+      callbacks[callbacks.length - 1]([{ isIntersecting: true }]);
+      expect(doneWrapper.emitted('load-more')).toBeUndefined();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });

@@ -295,7 +295,7 @@ RSpec.describe Captain::BaseTaskService do
     it 'tracks exceptions against the system key when an account hook exists' do
       create(:integrations_hook, :openai, account: account, settings: { 'api_key' => 'hook-key' })
 
-      expect(Llm::Config).to receive(:with_api_key).with('test-key', api_base: anything).and_raise(error)
+      expect(Llm::Config).to receive(:with_api_key).with('test-key', api_base: anything, request_timeout: 12).and_raise(error)
       expect(ChatwootExceptionTracker).to receive(:new).with(error, account: account).and_return(exception_tracker)
       expect(exception_tracker).to receive(:capture_exception)
 

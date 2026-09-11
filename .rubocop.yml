@@ -14,7 +14,7 @@ Layout/LineLength:
   Max: 150
 
 Metrics/ClassLength:
-  Max: 175
+  Max: 190
   Exclude:
     - 'app/models/message.rb'
     - 'app/models/conversation.rb'

@@ -11,6 +11,10 @@ class Captain::TasksPolicy < ApplicationPolicy
     true
   end
 
+  def reply_suggestion_status?
+    true
+  end
+
   def label_suggestion?
     true
   end

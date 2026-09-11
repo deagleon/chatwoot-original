@@ -1,4 +1,5 @@
 <script setup>
+import { ref, watch, onMounted, onBeforeUnmount } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { Virtualizer } from 'virtua/vue';
 
@@ -34,6 +35,52 @@ const emit = defineEmits([
 ]);
 
 const { t } = useI18n();
+
+// Scroll infinito: sentinel vazio ao final da área de scroll dispara o
+// `load-more` existente quando o usuário rola perto do fim (rootMargin 400px
+// pré-carrega antes do fim). O botão "Load more" continua como fallback.
+const scrollContainerRef = ref(null);
+const sentinelRef = ref(null);
+let infiniteScrollObserver = null;
+
+const maybeEmitLoadMore = () => {
+  if (props.hasMore && !props.loading) {
+    // Nome do evento é contrato com o board (e o botão existente): mantém
+    // kebab-case como o `load-more` já emitido no template.
+    // eslint-disable-next-line vue/custom-event-name-casing
+    emit('load-more', props.stage.id);
+  }
+};
+
+const disconnectInfiniteScroll = () => {
+  infiniteScrollObserver?.disconnect();
+  infiniteScrollObserver = null;
+};
+
+const connectInfiniteScroll = () => {
+  if (!scrollContainerRef.value || !sentinelRef.value) return;
+  if (typeof IntersectionObserver === 'undefined') return;
+  disconnectInfiniteScroll();
+  infiniteScrollObserver = new IntersectionObserver(
+    entries => {
+      if (entries.some(entry => entry.isIntersecting)) maybeEmitLoadMore();
+    },
+    { root: scrollContainerRef.value, rootMargin: '400px', threshold: 0 }
+  );
+  infiniteScrollObserver.observe(sentinelRef.value);
+};
+
+onMounted(connectInfiniteScroll);
+onBeforeUnmount(disconnectInfiniteScroll);
+// Sem mais páginas, o observer perde a função — desconecta para não
+// re-disparar; se voltar a haver (refetch com hasMore true), reconecta.
+watch(
+  () => props.hasMore,
+  hasMore => {
+    if (!hasMore) disconnectInfiniteScroll();
+    else connectInfiniteScroll();
+  }
+);
 
 const onDrop = e => {
   e.preventDefault();
@@ -80,7 +127,10 @@ const onDragOver = e => {
     </div>
 
     <!-- Cards -->
-    <div class="flex-1 overflow-y-auto px-2 py-2 min-h-0">
+    <div
+      ref="scrollContainerRef"
+      class="flex-1 overflow-y-auto px-2 py-2 min-h-0"
+    >
       <div
         v-if="loading && conversations.length === 0"
         class="flex justify-center py-4"
@@ -104,7 +154,9 @@ const onDragOver = e => {
               @open="conv => emit('open-card', conv)"
               @open-conversation="conv => emit('open-conversation', conv)"
               @mark-read="conversationId => emit('mark-read', conversationId)"
-              @mark-unread="conversationId => emit('mark-unread', conversationId)"
+              @mark-unread="
+                conversationId => emit('mark-unread', conversationId)
+              "
             />
           </div>
         </Virtualizer>
@@ -115,6 +167,8 @@ const onDragOver = e => {
           {{ t('PIPELINES.BOARD.COLUMN.EMPTY') }}
         </div>
       </template>
+      <!-- Sentinel do scroll infinito: vazio, ao final da área de scroll. -->
+      <div ref="sentinelRef" aria-hidden="true" />
     </div>
 
     <!-- Load more -->

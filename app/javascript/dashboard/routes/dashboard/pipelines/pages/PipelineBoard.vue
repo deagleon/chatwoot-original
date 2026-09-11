@@ -120,6 +120,19 @@ const createdRefetchDebounce = {};
 // filtrado por q em voo quando a busca foi limpa — sobrescrever o reload
 // completo que resolveu depois).
 const stageFetchRequestSeq = {};
+// Batch realtime: handlers do cable empurram payloads para as filas e agendam
+// um flush único de 500ms (timer compartilhado, mesmo padrão do searchDebounce).
+// O flush aplica tudo e ordena uma única vez por coluna tocada — uma rajada de
+// 50 eventos vira no máximo 1 aplicação + 1 sort por coluna. Preview/unread
+// atualizam igual, só coalescidos (atraso de até 500ms aceitável).
+const pendingCreated = [];
+const pendingUpdated = [];
+const pendingMessages = [];
+let realtimeFlushTimer = null;
+// Aba oculta: realtime pausado (handlers e refetches retornam sem tocar
+// estado); ao voltar, resync silencioso por coluna. Eventos perdidos no
+// período são esperados e cobertos pelo resync.
+const isTabHidden = ref(false);
 
 const statusOptions = [
   { value: 'open', label: 'Open' },
@@ -237,6 +250,70 @@ const sortColumn = stageId => {
         new Date(b.pipeline_stage_changed_at || 0).getTime()
     );
   }
+};
+
+// Resync silencioso ao voltar para a aba: refaz os fetches das páginas
+// 1..pageByStage[stageId] de cada coluna, concatena com dedupe por id (mesma
+// lógica do append) e substitui a coluna de uma vez. Reutiliza
+// stageFetchRequestSeq para descartar respostas velhas. Não mexe em filtros
+// nem em pageByStage. Scroll deslocado pelo Virtualizer é best-effort.
+const resyncStage = async stageId => {
+  const totalPages = pageByStage[stageId] ?? 1;
+  stageFetchRequestSeq[stageId] = (stageFetchRequestSeq[stageId] ?? 0) + 1;
+  const requestSeq = stageFetchRequestSeq[stageId];
+  loadingByStage[stageId] = true;
+  try {
+    const seen = new Set();
+    let merged = [];
+    let allCount = 0;
+    let lastPayloadLength = 0;
+    for (let page = 1; page <= totalPages; page += 1) {
+      const params = { ...buildParams(), page };
+      // eslint-disable-next-line no-await-in-loop
+      const response = await PipelinesAPI.stageConversations(
+        pipelineId.value,
+        stageId,
+        params
+      );
+      if (requestSeq !== stageFetchRequestSeq[stageId]) return;
+      const payload = response.data?.data?.payload ?? [];
+      if (page === 1) allCount = response.data?.data?.meta?.all_count ?? 0;
+      lastPayloadLength = payload.length;
+      payload.forEach(c => {
+        if (!seen.has(c.id)) {
+          seen.add(c.id);
+          merged.push(c);
+        }
+      });
+      if (payload.length === 0) break;
+    }
+    if (requestSeq !== stageFetchRequestSeq[stageId]) return;
+    conversationsByStage[stageId] = merged;
+    sortColumn(stageId);
+    hasMoreByStage[stageId] = lastPayloadLength > 0 && merged.length < allCount;
+  } catch {
+    // silently ignore — individual column errors don't block the board
+  } finally {
+    if (requestSeq === stageFetchRequestSeq[stageId]) {
+      loadingByStage[stageId] = false;
+    }
+  }
+};
+
+const resyncVisibleColumns = () => {
+  stages.value.forEach(stage => {
+    resyncStage(stage.id);
+  });
+};
+
+const handleVisibilityChange = () => {
+  if (typeof document === 'undefined') return;
+  if (document.hidden) {
+    isTabHidden.value = true;
+    return;
+  }
+  isTabHidden.value = false;
+  resyncVisibleColumns();
 };
 
 const handleDrop = async ({ stageId, conversationId }) => {
@@ -367,9 +444,9 @@ const onSearchInput = () => {
   }, 400);
 };
 
-// Refetch debounced da coluna alvo quando um created chega com busca (q)
-// ativa — burst de eventos vira um único fetch por coluna.
 const scheduleCreatedRefetch = stageId => {
+  // Aba oculta: nenhum refetch — o resync ao voltar cobre o período.
+  if (isTabHidden.value) return;
   clearTimeout(createdRefetchDebounce[stageId]);
   createdRefetchDebounce[stageId] = setTimeout(() => {
     delete createdRefetchDebounce[stageId];
@@ -395,7 +472,7 @@ const matchesActiveFilters = data => {
   return true;
 };
 
-const insertCardToStage = (stageId, data) => {
+const applyCreatedToStage = (stageId, data, touchedStages) => {
   if (!stageId || !conversationsByStage[stageId]) return;
 
   const alreadyOnBoard = Object.values(conversationsByStage).some(list =>
@@ -423,15 +500,13 @@ const insertCardToStage = (stageId, data) => {
   }
 
   conversationsByStage[stageId] = [...conversationsByStage[stageId], data];
-  sortColumn(stageId);
+  // Sem sort aqui: o flush ordena uma única vez por coluna tocada.
+  touchedStages?.add(stageId);
 };
 
-const onConversationCreated = data => {
-  insertCardToStage(data.pipeline_stage_id, data);
-};
-
-// Real-time: react to conversation.updated events from ActionCable
-const onConversationUpdated = data => {
+// Real-time: react to conversation.updated events from ActionCable.
+// Versão apply (sem sort): o flush ordena uma única vez por coluna tocada.
+const applyUpdatedConversation = (data, touchedStages) => {
   const conversationId = data.id;
   const newStageId = data.pipeline_stage_id;
 
@@ -444,7 +519,7 @@ const onConversationUpdated = data => {
   // uma etapa via regra de automação, ou movida a partir da tela de conversa/API),
   // insere diretamente na coluna da nova etapa.
   if (!fromStage) {
-    insertCardToStage(newStageId, data);
+    applyCreatedToStage(newStageId, data, touchedStages);
     return;
   }
 
@@ -465,7 +540,7 @@ const onConversationUpdated = data => {
     conversationsByStage[fromStage.id] = list.filter(
       c => c.id !== conversationId
     );
-    sortColumn(fromStage.id);
+    touchedStages?.add(fromStage.id);
 
     if (conversationsByStage[newStageId]) {
       if (filters.q) {
@@ -484,7 +559,7 @@ const onConversationUpdated = data => {
         { ...list[idx], ...data },
         ...conversationsByStage[newStageId],
       ];
-      sortColumn(newStageId);
+      touchedStages?.add(newStageId);
     }
   } else {
     // Stage não mudou, mas outros atributos (status, assignee, priority, labels)
@@ -499,13 +574,14 @@ const onConversationUpdated = data => {
     conversationsByStage[fromStage.id] = list.map(c =>
       c.id === conversationId ? { ...c, ...data } : c
     );
-    sortColumn(fromStage.id);
+    touchedStages?.add(fromStage.id);
   }
 };
 
 // Real-time: react to message.created events from ActionCable and keep the
 // card's unread state and preview fresh without refetching the column.
-const onMessageCreated = data => {
+// Versão apply (sem sort): o flush ordena uma única vez por coluna tocada.
+const applyIncomingMessage = (data, touchedStages) => {
   const conversationId = data.conversation_id;
   const stage = stages.value.find(s =>
     conversationsByStage[s.id]?.some(c => c.id === conversationId)
@@ -522,9 +598,48 @@ const onMessageCreated = data => {
       data.conversation?.last_activity_at ?? card.last_activity_at,
     ...(data.content ? { messages: [data] } : {}),
   };
-  sortColumn(stage.id);
+  touchedStages?.add(stage.id);
 };
 
+// Flush do batch realtime: aplica created → updated → messages nesta ordem e
+// ordena uma única vez por coluna tocada.
+const flushRealtimeQueues = () => {
+  realtimeFlushTimer = null;
+  const created = pendingCreated.splice(0);
+  const updated = pendingUpdated.splice(0);
+  const messages = pendingMessages.splice(0);
+  if (!created.length && !updated.length && !messages.length) return;
+  const touchedStages = new Set();
+  created.forEach(data =>
+    applyCreatedToStage(data.pipeline_stage_id, data, touchedStages)
+  );
+  updated.forEach(data => applyUpdatedConversation(data, touchedStages));
+  messages.forEach(data => applyIncomingMessage(data, touchedStages));
+  touchedStages.forEach(stageId => sortColumn(stageId));
+};
+
+const scheduleRealtimeFlush = () => {
+  if (realtimeFlushTimer) return;
+  realtimeFlushTimer = setTimeout(flushRealtimeQueues, 500);
+};
+
+const onConversationCreated = data => {
+  if (isTabHidden.value) return;
+  pendingCreated.push(data);
+  scheduleRealtimeFlush();
+};
+
+const onConversationUpdated = data => {
+  if (isTabHidden.value) return;
+  pendingUpdated.push(data);
+  scheduleRealtimeFlush();
+};
+
+const onMessageCreated = data => {
+  if (isTabHidden.value) return;
+  pendingMessages.push(data);
+  scheduleRealtimeFlush();
+};
 const onCardMarkUnread = async conversationId => {
   try {
     // O endpoint de unread responde sem payload; o show devolve o
@@ -560,6 +675,9 @@ onMounted(async () => {
   emitter.on(BUS_EVENTS.CONVERSATION_CREATED, onConversationCreated);
   emitter.on(BUS_EVENTS.CONVERSATION_UPDATED, onConversationUpdated);
   emitter.on(BUS_EVENTS.MESSAGE_CREATED, onMessageCreated);
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+  }
 });
 
 onBeforeUnmount(() => {
@@ -568,6 +686,11 @@ onBeforeUnmount(() => {
   emitter.off(BUS_EVENTS.MESSAGE_CREATED, onMessageCreated);
   clearTimeout(searchDebounce);
   Object.values(createdRefetchDebounce).forEach(clearTimeout);
+  clearTimeout(realtimeFlushTimer);
+  realtimeFlushTimer = null;
+  if (typeof document !== 'undefined') {
+    document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }
 });
 
 watch(

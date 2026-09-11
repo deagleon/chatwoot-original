@@ -890,6 +890,7 @@ ActiveRecord::Schema[7.2].define(version: 2026_08_31_000000) do
     t.bigint "pipeline_stage_id"
     t.datetime "pipeline_stage_changed_at"
     t.string "trello_card_id"
+    t.string "ai_assignee_type"
     t.index ["account_id", "display_id"], name: "index_conversations_on_account_id_and_display_id", unique: true
     t.index ["account_id", "id"], name: "index_conversations_on_id_and_account_id"
     t.index ["account_id", "inbox_id", "status", "assignee_id"], name: "conv_acid_inbid_stat_asgnid_idx"

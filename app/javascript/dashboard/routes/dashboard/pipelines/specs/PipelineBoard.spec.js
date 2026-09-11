@@ -335,31 +335,47 @@ describe('PipelineBoard', () => {
   });
 
   it('inserts a live-created conversation into its stage column sorted', async () => {
-    const wrapper = mountComponent();
-    await flushPromises();
+    // O batch realtime (500ms) exige fake timers: o emit só enfileira, o
+    // flush aplica e ordena uma única vez por coluna.
+    vi.useFakeTimers();
+    try {
+      const wrapper = mountComponent();
+      await vi.advanceTimersByTimeAsync(0);
 
-    const initialCallCount = mockStageConversations.mock.calls.length;
+      const initialCallCount = mockStageConversations.mock.calls.length;
 
-    // last_activity_at mais recente que os cards existentes (que não têm o
-    // campo → ordenam como 0): o card novo entra no topo da coluna.
-    emitterHandlers[BUS_EVENTS.CONVERSATION_CREATED]({
-      id: 300,
-      status: 'open',
-      inbox_id: 5,
-      labels: [],
-      unread_count: 1,
-      pipeline_stage_id: 10,
-      pipeline_stage_changed_at: new Date().toISOString(),
-      last_activity_at: Math.floor(Date.now() / 1000),
-      meta: { sender: { name: 'Dana', thumbnail: '' }, assignee: null },
-      messages: [{ content: 'New lead' }],
-    });
-    await flushPromises();
+      // last_activity_at mais recente que os cards existentes (que não têm o
+      // campo → ordenam como 0): o card novo entra no topo da coluna.
+      emitterHandlers[BUS_EVENTS.CONVERSATION_CREATED]({
+        id: 300,
+        status: 'open',
+        inbox_id: 5,
+        labels: [],
+        unread_count: 1,
+        pipeline_stage_id: 10,
+        pipeline_stage_changed_at: new Date().toISOString(),
+        last_activity_at: Math.floor(Date.now() / 1000),
+        meta: { sender: { name: 'Dana', thumbnail: '' }, assignee: null },
+        messages: [{ content: 'New lead' }],
+      });
+      // Enfileirado, ainda não aplicado.
+      await vi.advanceTimersByTimeAsync(0);
+      expect(
+        wrapper
+          .findAll('[data-testid="column"]')[0]
+          .attributes('data-conversation-ids')
+      ).toBe('100,101');
 
-    const columns = wrapper.findAll('[data-testid="column"]');
-    expect(columns[0].attributes('data-conversation-ids')).toBe('300,100,101');
-    // Sem refetch — o card entra direto do payload do cable
-    expect(mockStageConversations.mock.calls.length).toBe(initialCallCount);
+      await vi.advanceTimersByTimeAsync(500);
+      const columns = wrapper.findAll('[data-testid="column"]');
+      expect(columns[0].attributes('data-conversation-ids')).toBe(
+        '300,100,101'
+      );
+      // Sem refetch — o card entra direto do payload do cable
+      expect(mockStageConversations.mock.calls.length).toBe(initialCallCount);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('keeps a live-inserted card when a stage fetch is still in flight', async () => {
@@ -403,7 +419,8 @@ describe('PipelineBoard', () => {
         messages: [{ content: 'New lead' }],
       };
       emitterHandlers[BUS_EVENTS.CONVERSATION_CREATED](createdCard);
-      await vi.advanceTimersByTimeAsync(0);
+      // O emit só enfileira no batch realtime — o flush de 500ms aplica.
+      await vi.advanceTimersByTimeAsync(500);
 
       let columns = wrapper.findAll('[data-testid="column"]');
       expect(columns[0].attributes('data-conversation-ids')).toBe(
@@ -448,58 +465,68 @@ describe('PipelineBoard', () => {
   });
 
   it('ignores a created conversation that does not match the active filters', async () => {
-    const wrapper = mountComponent();
-    await flushPromises();
+    vi.useFakeTimers();
+    try {
+      const wrapper = mountComponent();
+      await vi.advanceTimersByTimeAsync(0);
 
-    // Filtro de status = open (mesma interação do teste de refetch de filtros)
-    const statusComboBox = wrapper.findAllComponents({
-      name: 'TagMultiSelectComboBox',
-    })[1];
-    await statusComboBox.find('div.cursor-pointer').trigger('click');
-    await statusComboBox.findAll('[role="option"]')[0].trigger('click');
-    await flushPromises();
+      // Filtro de status = open (mesma interação do teste de refetch de filtros)
+      const statusComboBox = wrapper.findAllComponents({
+        name: 'TagMultiSelectComboBox',
+      })[1];
+      await statusComboBox.find('div.cursor-pointer').trigger('click');
+      await statusComboBox.findAll('[role="option"]')[0].trigger('click');
+      await vi.advanceTimersByTimeAsync(0);
 
-    emitterHandlers[BUS_EVENTS.CONVERSATION_CREATED]({
-      id: 301,
-      status: 'resolved',
-      inbox_id: 5,
-      labels: [],
-      unread_count: 0,
-      pipeline_stage_id: 10,
-      pipeline_stage_changed_at: new Date().toISOString(),
-      last_activity_at: Math.floor(Date.now() / 1000),
-      meta: { sender: { name: 'Eve', thumbnail: '' }, assignee: null },
-      messages: [],
-    });
-    await flushPromises();
+      emitterHandlers[BUS_EVENTS.CONVERSATION_CREATED]({
+        id: 301,
+        status: 'resolved',
+        inbox_id: 5,
+        labels: [],
+        unread_count: 0,
+        pipeline_stage_id: 10,
+        pipeline_stage_changed_at: new Date().toISOString(),
+        last_activity_at: Math.floor(Date.now() / 1000),
+        meta: { sender: { name: 'Eve', thumbnail: '' }, assignee: null },
+        messages: [],
+      });
+      await vi.advanceTimersByTimeAsync(500);
 
-    const columns = wrapper.findAll('[data-testid="column"]');
-    expect(columns[0].attributes('data-conversation-ids')).toBe('100,101');
+      const columns = wrapper.findAll('[data-testid="column"]');
+      expect(columns[0].attributes('data-conversation-ids')).toBe('100,101');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('ignores a created conversation already present on the board', async () => {
-    const wrapper = mountComponent();
-    await flushPromises();
+    vi.useFakeTimers();
+    try {
+      const wrapper = mountComponent();
+      await vi.advanceTimersByTimeAsync(0);
 
-    // id 200 já existe na coluna do stage 20 — moves ficam com o
-    // CONVERSATION_UPDATED, o created não pode duplicar o card.
-    emitterHandlers[BUS_EVENTS.CONVERSATION_CREATED]({
-      id: 200,
-      status: 'open',
-      inbox_id: 5,
-      labels: [],
-      unread_count: 0,
-      pipeline_stage_id: 10,
-      pipeline_stage_changed_at: new Date().toISOString(),
-      last_activity_at: Math.floor(Date.now() / 1000),
-      meta: { sender: { name: 'Charlie', thumbnail: '' }, assignee: null },
-      messages: [],
-    });
-    await flushPromises();
+      // id 200 já existe na coluna do stage 20 — moves ficam com o
+      // CONVERSATION_UPDATED, o created não pode duplicar o card.
+      emitterHandlers[BUS_EVENTS.CONVERSATION_CREATED]({
+        id: 200,
+        status: 'open',
+        inbox_id: 5,
+        labels: [],
+        unread_count: 0,
+        pipeline_stage_id: 10,
+        pipeline_stage_changed_at: new Date().toISOString(),
+        last_activity_at: Math.floor(Date.now() / 1000),
+        meta: { sender: { name: 'Charlie', thumbnail: '' }, assignee: null },
+        messages: [],
+      });
+      await vi.advanceTimersByTimeAsync(500);
 
-    const columns = wrapper.findAll('[data-testid="column"]');
-    expect(columns[0].attributes('data-conversation-ids')).toBe('100,101');
-    expect(columns[1].attributes('data-conversation-ids')).toBe('200');
+      const columns = wrapper.findAll('[data-testid="column"]');
+      expect(columns[0].attributes('data-conversation-ids')).toBe('100,101');
+      expect(columns[1].attributes('data-conversation-ids')).toBe('200');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('refetches the target stage instead of inserting when search is active', async () => {
@@ -541,11 +568,14 @@ describe('PipelineBoard', () => {
         messages: [{ content: 'another proposal' }],
       });
 
-      // Burst de eventos coalesce: nenhum fetch imediato
+      // Burst de eventos coalesce: nenhum fetch imediato (batch realtime de
+      // 500ms ainda não flusheou)
       expect(mockStageConversations.mock.calls.length).toBe(initialCallCount);
 
-      // Dispara os debounces e drena as promises dos fetches
-      await vi.advanceTimersByTimeAsync(400);
+      // 400ms: debounce da busca (fetchAllColumns: 2 colunas). 500ms: flush do
+      // batch (aplica os created, que com q ativo só agendam refetch).
+      // 900ms: refetch coalescido único da coluna alvo.
+      await vi.advanceTimersByTimeAsync(1000);
 
       // Debounce da busca pendente (fetchAllColumns: 2 colunas) + um único
       // refetch coalescido da coluna alvo com o q ativo — sem inserção às cegas
@@ -565,88 +595,225 @@ describe('PipelineBoard', () => {
   });
 
   it('inserts an updated conversation into its stage when not previously on the board', async () => {
-    const wrapper = mountComponent();
-    await flushPromises();
+    vi.useFakeTimers();
+    try {
+      const wrapper = mountComponent();
+      await vi.advanceTimersByTimeAsync(0);
 
-    const initialCallCount = mockStageConversations.mock.calls.length;
+      const initialCallCount = mockStageConversations.mock.calls.length;
 
-    // Cenário: conversa nova foi criada sem estágio e agora uma regra de automação
-    // disparou move_to_stage (ou agente moveu via menu de contexto).
-    emitterHandlers[BUS_EVENTS.CONVERSATION_UPDATED]({
-      id: 305,
-      status: 'open',
-      inbox_id: 5,
-      labels: [],
-      unread_count: 1,
-      pipeline_stage_id: 10,
-      pipeline_stage_changed_at: new Date().toISOString(),
-      last_activity_at: Math.floor(Date.now() / 1000),
-      meta: { sender: { name: 'Helen', thumbnail: '' }, assignee: null },
-      messages: [{ content: 'Lead from automation' }],
-    });
-    await flushPromises();
+      // Cenário: conversa nova foi criada sem estágio e agora uma regra de automação
+      // disparou move_to_stage (ou agente moveu via menu de contexto).
+      emitterHandlers[BUS_EVENTS.CONVERSATION_UPDATED]({
+        id: 305,
+        status: 'open',
+        inbox_id: 5,
+        labels: [],
+        unread_count: 1,
+        pipeline_stage_id: 10,
+        pipeline_stage_changed_at: new Date().toISOString(),
+        last_activity_at: Math.floor(Date.now() / 1000),
+        meta: { sender: { name: 'Helen', thumbnail: '' }, assignee: null },
+        messages: [{ content: 'Lead from automation' }],
+      });
+      await vi.advanceTimersByTimeAsync(500);
 
-    const columns = wrapper.findAll('[data-testid="column"]');
-    expect(columns[0].attributes('data-conversation-ids')).toBe('305,100,101');
-    expect(mockStageConversations.mock.calls.length).toBe(initialCallCount);
+      const columns = wrapper.findAll('[data-testid="column"]');
+      expect(columns[0].attributes('data-conversation-ids')).toBe(
+        '305,100,101'
+      );
+      expect(mockStageConversations.mock.calls.length).toBe(initialCallCount);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('removes an existing card when updated to no longer match active filters', async () => {
-    const wrapper = mountComponent();
-    await flushPromises();
+    vi.useFakeTimers();
+    try {
+      const wrapper = mountComponent();
+      await vi.advanceTimersByTimeAsync(0);
 
-    // Filtro de status = open
-    const statusComboBox = wrapper.findAllComponents({
-      name: 'TagMultiSelectComboBox',
-    })[1];
-    await statusComboBox.find('div.cursor-pointer').trigger('click');
-    await statusComboBox.findAll('[role="option"]')[0].trigger('click');
-    await flushPromises();
+      // Filtro de status = open
+      const statusComboBox = wrapper.findAllComponents({
+        name: 'TagMultiSelectComboBox',
+      })[1];
+      await statusComboBox.find('div.cursor-pointer').trigger('click');
+      await statusComboBox.findAll('[role="option"]')[0].trigger('click');
+      await vi.advanceTimersByTimeAsync(0);
 
-    let columns = wrapper.findAll('[data-testid="column"]');
-    expect(columns[0].attributes('data-conversation-ids')).toBe('100,101');
+      let columns = wrapper.findAll('[data-testid="column"]');
+      expect(columns[0].attributes('data-conversation-ids')).toBe('100,101');
 
-    // Conversa 100 é resolvida: deve sair da coluna
-    emitterHandlers[BUS_EVENTS.CONVERSATION_UPDATED]({
-      id: 100,
-      status: 'resolved',
-      inbox_id: 5,
-      labels: [],
-      unread_count: 0,
-      pipeline_stage_id: 10,
-      pipeline_stage_changed_at: new Date().toISOString(),
-      last_activity_at: Math.floor(Date.now() / 1000),
-      meta: { sender: { name: 'Alice', thumbnail: '' }, assignee: null },
-      messages: [],
-    });
-    await flushPromises();
+      // Conversa 100 é resolvida: deve sair da coluna
+      emitterHandlers[BUS_EVENTS.CONVERSATION_UPDATED]({
+        id: 100,
+        status: 'resolved',
+        inbox_id: 5,
+        labels: [],
+        unread_count: 0,
+        pipeline_stage_id: 10,
+        pipeline_stage_changed_at: new Date().toISOString(),
+        last_activity_at: Math.floor(Date.now() / 1000),
+        meta: { sender: { name: 'Alice', thumbnail: '' }, assignee: null },
+        messages: [],
+      });
+      await vi.advanceTimersByTimeAsync(500);
 
-    columns = wrapper.findAll('[data-testid="column"]');
-    expect(columns[0].attributes('data-conversation-ids')).toBe('101');
+      columns = wrapper.findAll('[data-testid="column"]');
+      expect(columns[0].attributes('data-conversation-ids')).toBe('101');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('ignores an updated conversation whose new stage belongs to another pipeline', async () => {
-    const wrapper = mountComponent();
-    await flushPromises();
+    vi.useFakeTimers();
+    try {
+      const wrapper = mountComponent();
+      await vi.advanceTimersByTimeAsync(0);
 
-    // Conversa atualizada com stage 999 que não existe nas colunas deste board
-    emitterHandlers[BUS_EVENTS.CONVERSATION_UPDATED]({
-      id: 306,
-      status: 'open',
-      inbox_id: 5,
-      labels: [],
-      unread_count: 0,
-      pipeline_stage_id: 999,
-      pipeline_stage_changed_at: new Date().toISOString(),
-      last_activity_at: Math.floor(Date.now() / 1000),
-      meta: { sender: { name: 'Ian', thumbnail: '' }, assignee: null },
-      messages: [],
+      // Conversa atualizada com stage 999 que não existe nas colunas deste board
+      emitterHandlers[BUS_EVENTS.CONVERSATION_UPDATED]({
+        id: 306,
+        status: 'open',
+        inbox_id: 5,
+        labels: [],
+        unread_count: 0,
+        pipeline_stage_id: 999,
+        pipeline_stage_changed_at: new Date().toISOString(),
+        last_activity_at: Math.floor(Date.now() / 1000),
+        meta: { sender: { name: 'Ian', thumbnail: '' }, assignee: null },
+        messages: [],
+      });
+      await vi.advanceTimersByTimeAsync(500);
+
+      const columns = wrapper.findAll('[data-testid="column"]');
+      expect(columns[0].attributes('data-conversation-ids')).toBe('100,101');
+      expect(columns[1].attributes('data-conversation-ids')).toBe('200');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('applies a mixed realtime burst in a single flush per column', async () => {
+    // Rajada de 50 eventos (25 created + 25 messages em 2 colunas): nada
+    // aplica antes do flush de 500ms; depois, tudo de uma vez com 1 sort por
+    // coluna — preview/unread finais corretos, sem churn de re-render.
+    vi.useFakeTimers();
+    try {
+      const wrapper = mountComponent();
+      await vi.advanceTimersByTimeAsync(0);
+
+      const base = Math.floor(Date.now() / 1000);
+      for (let i = 0; i < 25; i += 1) {
+        emitterHandlers[BUS_EVENTS.CONVERSATION_CREATED]({
+          id: 1000 + i,
+          status: 'open',
+          inbox_id: 5,
+          labels: [],
+          unread_count: 1,
+          pipeline_stage_id: 10,
+          pipeline_stage_changed_at: new Date().toISOString(),
+          last_activity_at: base + i,
+          meta: {
+            sender: { name: `Lead ${i}`, thumbnail: '' },
+            assignee: null,
+          },
+          messages: [{ content: `hello ${i}` }],
+        });
+        emitterHandlers[BUS_EVENTS.MESSAGE_CREATED]({
+          conversation_id: 200,
+          content: `ping ${i}`,
+          conversation: { unread_count: i + 1, last_activity_at: base + i },
+        });
+      }
+
+      // Enfileirado: nenhum fetch e nenhuma aplicação antes do flush.
+      const callsBeforeFlush = mockStageConversations.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(0);
+      let columns = wrapper.findAll('[data-testid="column"]');
+      expect(columns[0].attributes('data-conversation-ids')).toBe('100,101');
+      expect(columns[1].attributes('data-conversation-ids')).toBe('200');
+
+      await vi.advanceTimersByTimeAsync(500);
+      columns = wrapper.findAll('[data-testid="column"]');
+      const ids = columns[0].attributes('data-conversation-ids').split(',');
+      expect(ids).toHaveLength(27);
+      expect(ids.slice(0, 25)).toEqual(
+        Array.from({ length: 25 }, (_, k) => String(1024 - k))
+      );
+      expect(ids.slice(25)).toEqual(['100', '101']);
+      expect(columns[1].attributes('data-conversation-ids')).toBe('200');
+      // Batch puro client-side: nenhum fetch extra de stage.
+      expect(mockStageConversations.mock.calls.length).toBe(callsBeforeFlush);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('pauses realtime while the tab is hidden and resyncs on return', async () => {
+    // Aba oculta: handlers retornam sem tocar estado e sem fetches; ao voltar,
+    // resync silencioso (pages 1..N por coluna) mantém cards/ordem.
+    vi.useFakeTimers();
+    const hiddenDescriptor = Object.getOwnPropertyDescriptor(
+      document,
+      'hidden'
+    );
+    let hiddenValue = false;
+    Object.defineProperty(document, 'hidden', {
+      configurable: true,
+      get: () => hiddenValue,
     });
-    await flushPromises();
+    try {
+      const wrapper = mountComponent();
+      await vi.advanceTimersByTimeAsync(0);
+      const callsAfterMount = mockStageConversations.mock.calls.length;
 
-    const columns = wrapper.findAll('[data-testid="column"]');
-    expect(columns[0].attributes('data-conversation-ids')).toBe('100,101');
-    expect(columns[1].attributes('data-conversation-ids')).toBe('200');
+      hiddenValue = true;
+      document.dispatchEvent(new Event('visibilitychange'));
+      emitterHandlers[BUS_EVENTS.CONVERSATION_CREATED]({
+        id: 400,
+        status: 'open',
+        inbox_id: 5,
+        labels: [],
+        unread_count: 1,
+        pipeline_stage_id: 10,
+        pipeline_stage_changed_at: new Date().toISOString(),
+        last_activity_at: Math.floor(Date.now() / 1000),
+        meta: { sender: { name: 'Ghost', thumbnail: '' }, assignee: null },
+        messages: [{ content: 'while hidden' }],
+      });
+      await vi.advanceTimersByTimeAsync(1000);
+
+      // Zero mutações no período: sem card novo e sem GETs de stage.
+      let columns = wrapper.findAll('[data-testid="column"]');
+      expect(columns[0].attributes('data-conversation-ids')).toBe('100,101');
+      expect(mockStageConversations.mock.calls.length).toBe(callsAfterMount);
+
+      // Ao voltar: resync dispara (pages 1..N por coluna) e mantém a ordem.
+      // (>=: boards de testes anteriores ainda montados também resyncam no
+      // evento global; o que importa é que este board dispara o dele.)
+      hiddenValue = false;
+      document.dispatchEvent(new Event('visibilitychange'));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(mockStageConversations.mock.calls.length).toBeGreaterThan(
+        callsAfterMount
+      );
+      expect(mockStageConversations).toHaveBeenCalledWith(
+        '1',
+        10,
+        expect.objectContaining({ page: 1 })
+      );
+      columns = wrapper.findAll('[data-testid="column"]');
+      expect(columns[0].attributes('data-conversation-ids')).toBe('100,101');
+      expect(columns[1].attributes('data-conversation-ids')).toBe('200');
+      wrapper.unmount();
+    } finally {
+      if (hiddenDescriptor) {
+        Object.defineProperty(document, 'hidden', hiddenDescriptor);
+      }
+      vi.useRealTimers();
+    }
   });
 });
-

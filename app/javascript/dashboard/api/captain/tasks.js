@@ -67,6 +67,16 @@ class TasksAPI extends ApiClient {
   }
 
   /**
+   * Polls the status of an async reply suggestion task.
+   * @param {string} taskId - The task ID returned by replySuggestion.
+   * @param {AbortSignal} [signal] - AbortSignal to cancel the request.
+   * @returns {Promise} A promise that resolves with the task status payload.
+   */
+  replySuggestionStatus(taskId, signal) {
+    return axios.get(`${this.url}/reply_suggestion/${taskId}`, { signal });
+  }
+
+  /**
    * Gets label suggestions for a conversation.
    * @param {string} conversationId - The conversation ID.
    * @param {AbortSignal} [signal] - AbortSignal to cancel the request.
