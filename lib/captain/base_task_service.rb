@@ -10,6 +10,11 @@ class Captain::BaseTaskService
   TOKEN_LIMIT = 400_000
   GPT_MODEL = Llm::Config::DEFAULT_MODEL
 
+  # Legitimate flows use 1 tool round (search -> answer); 5 is headroom, not a knob.
+  MAX_TOOL_CALLS = 5
+
+  class TooManyToolCalls < StandardError; end
+
   # Prepend enterprise module to subclasses when they're defined.
   # This ensures the enterprise perform wrapper is applied even when
   # subclasses define their own perform method, since prepend puts
@@ -51,6 +56,15 @@ class Captain::BaseTaskService
       execute_ruby_llm_request(model: model, messages: messages, schema: schema, tools: tools)
     end
 
+    finalize_response(response, messages)
+  end
+
+  # A tool-augmented generation can resolve with no text at all (e.g. a
+  # tool-call payload truncated at the token cap); that is useless to the
+  # agent, so fail with the friendly error instead of a blank suggestion.
+  def finalize_response(response, messages)
+    blank_failure = { error: I18n.t('captain.generation_failed'), request_messages: messages }
+    return blank_failure if response[:error].blank? && response[:message].blank?
     return response unless build_follow_up_context? && response[:message].present?
 
     response.merge(follow_up_context: build_follow_up_context(messages, response))
@@ -96,6 +110,9 @@ class Captain::BaseTaskService
   rescue Faraday::TimeoutError, Timeout::Error => e
     capture_llm_exception(e, credential: credential)
     { error: I18n.t('captain.timeout'), request_messages: messages }
+  rescue TooManyToolCalls => e
+    capture_llm_exception(e, credential: credential)
+    { error: I18n.t('captain.generation_failed'), request_messages: messages }
   rescue StandardError => e
     capture_llm_exception(e, credential: credential)
     { error: e.message, request_messages: messages }
@@ -105,6 +122,7 @@ class Captain::BaseTaskService
     chat = Llm::Config.chat(context: context, model: model)
     extra_params = chat_params
     chat.with_params(**extra_params) if extra_params.any?
+    guard_tool_call_ceiling(chat)
     system_msg = messages.find { |m| m[:role] == 'system' }
     chat.with_instructions(system_msg[:content]) if system_msg
     chat.with_schema(schema) if schema
@@ -115,6 +133,17 @@ class Captain::BaseTaskService
     end
 
     chat
+  end
+
+  # RubyLLM auto-executes model tool calls in-process and re-completes with
+  # no round guard, each round resetting the per-request budget; bound the
+  # whole generation so a looping model fails friendly instead of spinning.
+  def guard_tool_call_ceiling(chat)
+    tool_calls = 0
+    chat.on_tool_call do
+      tool_calls += 1
+      raise TooManyToolCalls, "exceeded #{MAX_TOOL_CALLS} model tool calls" if tool_calls > MAX_TOOL_CALLS
+    end
   end
 
   def add_messages_if_needed(chat, conversation_messages)

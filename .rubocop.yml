@@ -19,6 +19,7 @@ Metrics/ClassLength:
     - 'app/models/message.rb'
     - 'app/models/conversation.rb'
     - 'config/initializers/rack_attack.rb'
+    - 'lib/captain/base_task_service.rb'
 
 Metrics/MethodLength:
   Max: 19

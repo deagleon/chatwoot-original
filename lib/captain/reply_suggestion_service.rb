@@ -1,7 +1,7 @@
 class Captain::ReplySuggestionService < Captain::BaseTaskService
   # Generous ceiling for a chat reply: clips pathological completions,
   # bounding tail latency and cost per generation.
-  REPLY_SUGGESTION_MAX_TOKENS = 1000
+  REPLY_SUGGESTION_MAX_TOKENS = 2000
 
   pattr_initialize [:account!, :conversation_display_id!, :user!]
 

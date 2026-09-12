@@ -461,6 +461,7 @@ en:
     disabled: 'Captain AI is disabled for this account.'
     api_key_missing: 'Captain AI API key is not configured.'
     timeout: 'Captain is taking too long to respond. Please try again.'
+    generation_failed: 'Captain couldn''t generate a response. Please try again.'
     conversation_not_found: 'Conversation not found.'
     copilot:
       using_tool: 'Using tool %{function_name}'

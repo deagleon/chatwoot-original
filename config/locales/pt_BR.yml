@@ -424,6 +424,7 @@ pt_BR:
     disabled: 'O Capitão IA está desativado para esta conta.'
     api_key_missing: 'A chave de API do Capitão IA não está configurada.'
     timeout: 'O Captain está demorando para responder. Tente novamente.'
+    generation_failed: 'O Captain não conseguiu gerar uma resposta. Tente novamente.'
     conversation_not_found: 'Conversa não encontrada.'
     copilot:
       using_tool: 'Usando a ferramenta %{function_name}'
