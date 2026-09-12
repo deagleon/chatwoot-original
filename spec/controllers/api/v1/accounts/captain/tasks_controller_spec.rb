@@ -36,6 +36,7 @@ RSpec.describe 'Api::V1::Accounts::Captain::Tasks', type: :request do
     allow(mock_chat).to receive(:with_params).and_return(mock_chat)
     allow(mock_chat).to receive(:with_tool).and_return(mock_chat)
     allow(mock_chat).to receive(:on_end_message).and_return(mock_chat)
+    allow(mock_chat).to receive(:on_tool_call).and_return(mock_chat)
     allow(mock_chat).to receive(:with_instructions)
     mock_chat
   end
