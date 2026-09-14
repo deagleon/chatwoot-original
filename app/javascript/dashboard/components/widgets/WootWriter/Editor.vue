@@ -271,6 +271,19 @@ const shouldShowUserMentions = computed(() => {
   return showUserMentions.value && props.isPrivate;
 });
 
+// While any picker is open the Enter key belongs to it: the picker inserts the
+// highlighted item, and the composer must not break the line or fall through to
+// the send shortcut on the same press.
+const isPickerOpen = computed(
+  () =>
+    shouldShowUserMentions.value ||
+    shouldShowCannedResponses.value ||
+    shouldShowVariables.value ||
+    showEmojiMenu.value ||
+    showToolsMenu.value ||
+    shouldShowMacros.value
+);
+
 // The picker owns the search field, so it takes focus while open. Dismissing it hands
 // focus back; selecting one does so through the insert itself. The suggestion stays
 // active in the document, so the picker only reopens once the trigger is typed afresh.
@@ -801,6 +814,10 @@ function handleLineBreakWhenCmdAndEnterToSendEnabled(event) {
 function onKeydown(event) {
   if (isEscape(event)) {
     collapseSelection(editorView);
+    return true;
+  }
+  if (hasPressedEnterAndNotCmdOrShift(event) && isPickerOpen.value) {
+    event.preventDefault();
     return true;
   }
   if (isEnterToSendEnabled()) {

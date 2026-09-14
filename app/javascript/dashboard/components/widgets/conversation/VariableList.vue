@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { MESSAGE_VARIABLES } from 'shared/constants/messages';
 import { useMapGetter } from 'dashboard/composables/store';
@@ -29,6 +29,15 @@ const { t } = useI18n();
 const customAttributes = useMapGetter('attributes/getAttributes');
 
 const searchQuery = ref(sanitizeVariableSearchKey(props.searchKey));
+
+// Keystrokes can keep landing in the composer instead of the picker's search
+// field; mirroring the trigger text keeps the list filtering as the user types.
+watch(
+  () => props.searchKey,
+  value => {
+    searchQuery.value = sanitizeVariableSearchKey(value);
+  }
+);
 
 const searchTerm = computed(() => searchQuery.value.trim().toLowerCase());
 

@@ -1,5 +1,13 @@
 <script setup>
-import { computed, ref, watch, useSlots, useTemplateRef, onMounted } from 'vue';
+import {
+  computed,
+  ref,
+  watch,
+  useSlots,
+  useTemplateRef,
+  onMounted,
+  nextTick,
+} from 'vue';
 import {
   useElementBounding,
   useResizeObserver,
@@ -62,8 +70,14 @@ const isRTL = useMapGetter('accounts/isRTL');
 
 const dialogTarget = ref(null);
 
-onMounted(() => {
+onMounted(async () => {
   dialogTarget.value = caretAnchorRef.value?.closest('dialog') || null;
+  // The content is teleported to `body` on the first render and only re-targeted
+  // to the dialog here. Inside a modal dialog the body is inert, so the
+  // autofocus on PreviewPicker runs too early and is silently ignored. Focus
+  // again once the content has landed in its final container.
+  await nextTick();
+  pickerRef.value?.focusSearch();
 });
 
 const teleportTarget = computed(

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, shallowRef, onMounted } from 'vue';
+import { computed, ref, shallowRef, watch, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import emojiGroups from 'shared/components/emoji/emojisGroup.json';
 import CaretAnchoredPicker from 'dashboard/components-next/preview-picker/CaretAnchoredPicker.vue';
@@ -22,6 +22,15 @@ const { t } = useI18n();
 const allEmojis = shallowRef([]);
 
 const searchQuery = ref(props.searchKey);
+
+// Keystrokes can keep landing in the composer instead of the picker's search
+// field; mirroring the trigger text keeps the list filtering as the user types.
+watch(
+  () => props.searchKey,
+  value => {
+    searchQuery.value = value;
+  }
+);
 
 // Names are spaced and shortcodes are underscored, so both sides drop the separators
 // and `grinning face`, `grinningface` and `grinning_face` all reach the same emoji.
