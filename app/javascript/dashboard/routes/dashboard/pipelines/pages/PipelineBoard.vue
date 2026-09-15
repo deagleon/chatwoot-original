@@ -842,6 +842,7 @@ watch(
       :width="isSidePanelOpen ? '7xl' : '5xl'"
       :show-cancel-button="false"
       :show-confirm-button="false"
+      flat
       @close="closePreview"
     >
       <!-- Toggles dos painéis laterais do preview (contato / Captain): estado
@@ -857,7 +858,6 @@ watch(
             type="button"
             icon="i-ph-user-bold"
             class="!rounded-full transition-all duration-[250ms] ease-out active:!scale-95 active:!brightness-105 active:duration-75"
-            :class="{ 'bg-n-alpha-2 active:shadow-sm': isContactPanelOpen }"
             :aria-label="t('CONVERSATION.SIDEBAR.CONTACT')"
             @click="handleContactPanelToggle"
           />

@@ -91,6 +91,8 @@ export default {
       isProgrammaticScroll: false,
       messageSentSinceOpened: false,
       labelSuggestions: [],
+      scrollRafPending: false,
+      latestScrollTop: 0,
     };
   },
 
@@ -365,7 +367,12 @@ export default {
     addScrollListener() {
       this.conversationPanel = this.$el.querySelector('.conversation-panel');
       this.setScrollParams();
-      this.conversationPanel.addEventListener('scroll', this.handleScroll);
+      // Passive: o handler nunca chama preventDefault — sem isso o browser
+      // bloqueia o scroll (compositor) esperando o JS a cada evento, o que
+      // trava a rolagem em máquina fraca mesmo com handler barato.
+      this.conversationPanel.addEventListener('scroll', this.handleScroll, {
+        passive: true,
+      });
       this.$nextTick(() => this.scrollToBottom());
       this.isLoadingPrevious = false;
     },
@@ -449,8 +456,20 @@ export default {
       } else {
         this.hasUserScrolled = true;
       }
-      emitter.emit(BUS_EVENTS.ON_MESSAGE_LIST_SCROLL);
-      this.fetchPreviousMessages(e.target.scrollTop);
+      // Coalesce por frame: scroll dispara dezenas de eventos/s; o trabalho
+      // (emit + fetch check) roda 1× por frame com o scrollTop mais recente.
+      // Sem isso, máquina fraca enfileira fetch-checks redundantes e janka.
+      if (this.scrollRafPending) {
+        this.latestScrollTop = e.target.scrollTop;
+        return;
+      }
+      this.scrollRafPending = true;
+      this.latestScrollTop = e.target.scrollTop;
+      requestAnimationFrame(() => {
+        this.scrollRafPending = false;
+        emitter.emit(BUS_EVENTS.ON_MESSAGE_LIST_SCROLL);
+        this.fetchPreviousMessages(this.latestScrollTop);
+      });
     },
 
     makeMessagesRead() {

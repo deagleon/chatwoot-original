@@ -5,6 +5,7 @@
 #  id                        :integer          not null, primary key
 #  additional_attributes     :jsonb
 #  agent_last_seen_at        :datetime
+#  ai_assignee_type          :string
 #  assignee_last_seen_at     :datetime
 #  cached_label_list         :text
 #  contact_last_seen_at      :datetime
@@ -52,6 +53,8 @@
 #  index_conversations_on_inbox_id                       (inbox_id)
 #  index_conversations_on_pipeline_stage_id              (pipeline_stage_id)
 #  index_conversations_on_priority                       (priority)
+#  index_conversations_on_stage_changed_at               (account_id,pipeline_stage_id,pipeline_stage_changed_at)
+#  index_conversations_on_stage_last_activity            (account_id,pipeline_stage_id,last_activity_at,id)
 #  index_conversations_on_status_and_account_id          (status,account_id)
 #  index_conversations_on_status_and_priority            (status,priority)
 #  index_conversations_on_team_id                        (team_id)
