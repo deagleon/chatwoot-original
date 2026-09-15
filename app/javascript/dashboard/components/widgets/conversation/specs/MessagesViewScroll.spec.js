@@ -3,6 +3,20 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createStore } from 'vuex';
 import MessagesView from '../MessagesView.vue';
 
+// useLabelSuggestions/useAccount disparam computeds que dependem de
+// integrations/getAppIntegrations e da rota — fora do escopo deste spec
+// (scroll), então mockamos os dois na fonte.
+vi.mock('dashboard/composables/useLabelSuggestions', () => ({
+  useLabelSuggestions: () => ({
+    captainTasksEnabled: { value: false },
+    isLabelSuggestionFeatureEnabled: { value: false },
+    getLabelSuggestions: vi.fn(async () => []),
+  }),
+}));
+vi.mock('vue-router', () => ({
+  useRoute: () => ({ params: {}, query: {} }),
+}));
+
 const buildStore = () =>
   createStore({
     getters: {
@@ -15,6 +29,7 @@ const buildStore = () =>
       'inboxes/getInbox': () => () => ({}),
       'inboxes/getInstagramInboxByInstagramId': () => () => null,
       'conversationTypingStatus/getUserList': () => () => [],
+      'integrations/getAppIntegrations': () => [],
     },
     actions: {
       fetchAllAttachments: vi.fn(),
