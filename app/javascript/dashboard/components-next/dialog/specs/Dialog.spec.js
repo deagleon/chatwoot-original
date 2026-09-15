@@ -93,4 +93,21 @@ describe('Dialog', () => {
     await wrapper.find('form').trigger('submit.prevent');
     expect(wrapper.emitted('confirm')).toBeTruthy();
   });
+
+  it('removes blur and shadows in flat mode', () => {
+    const wrapper = createWrapper({ flat: true });
+    const dialog = wrapper.find('dialog');
+    expect(dialog.classes()).toContain('shadow-none');
+    expect(dialog.classes()).toContain('flat-dialog');
+    const form = wrapper.find('form');
+    expect(form.classes()).not.toContain('backdrop-blur-[16px]');
+    expect(form.classes()).not.toContain('shadow-xl');
+  });
+
+  it('keeps blur and shadows by default', () => {
+    const wrapper = createWrapper();
+    const form = wrapper.find('form');
+    expect(form.classes()).toContain('backdrop-blur-[16px]');
+    expect(wrapper.find('dialog').classes()).toContain('shadow-xl');
+  });
 });
