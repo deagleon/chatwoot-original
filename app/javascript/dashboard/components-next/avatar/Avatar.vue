@@ -83,17 +83,31 @@ const STATUS_CLASSES = computed(() => ({
 
 const showDefaultAvatar = computed(() => !props.src && !props.name);
 
-const initials = computed(() => {
-  if (!props.name) return '';
-  const words = removeEmoji(props.name).split(/\s+/);
-  return words.length === 1
-    ? words[0].charAt(0).toUpperCase()
-    : words
-        .slice(0, 2)
-        .map(word => word.charAt(0))
-        .join('')
-        .toUpperCase();
-});
+// Memo por nome: no board, o mesmo contato aparece em vários cards e cada
+// render re-executava a regex de emoji (cara) + split + toUpperCase por card.
+// O board tem centenas de cards; o Map limita o custo a 1× por nome distinto.
+// Cap de 2000 entradas: nomes únicos demais (busca infinita) não vazam memória.
+const initialsCache = new Map();
+const getInitials = name => {
+  if (!name) return '';
+  let cached = initialsCache.get(name);
+  if (cached === undefined) {
+    const words = removeEmoji(name).split(/\s+/);
+    cached =
+      words.length === 1
+        ? words[0].charAt(0).toUpperCase()
+        : words
+            .slice(0, 2)
+            .map(word => word.charAt(0))
+            .join('')
+            .toUpperCase();
+    if (initialsCache.size >= 2000) initialsCache.clear();
+    initialsCache.set(name, cached);
+  }
+  return cached;
+};
+
+const initials = computed(() => getInitials(props.name));
 
 const getColorsByNameLength = computed(() => {
   if (!props.name) return AVATAR_COLORS.default;
@@ -209,7 +223,7 @@ watch(
         :class="STATUS_CLASSES[status]"
       />
       <div
-        v-if="inbox && !(status && STATUS_CLASSES[status])"
+        v-else-if="inbox && !(status && STATUS_CLASSES[status])"
         :style="badgeStyles"
         class="absolute z-20 flex items-center justify-center rounded-full bg-n-solid-1 border border-transparent flex-shrink-0"
       >
@@ -245,6 +259,8 @@ watch(
         v-if="src && isImageValid"
         :src="src"
         :alt="name"
+        loading="lazy"
+        decoding="async"
         @error="invalidateCurrentImage"
       />
 

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2026_08_31_000000) do
+ActiveRecord::Schema[7.2].define(version: 2026_09_15_000000) do
   # These extensions should be enabled to support this database
   enable_extension "pg_stat_statements"
   enable_extension "pg_trgm"
@@ -894,6 +894,8 @@ ActiveRecord::Schema[7.2].define(version: 2026_08_31_000000) do
     t.index ["account_id", "display_id"], name: "index_conversations_on_account_id_and_display_id", unique: true
     t.index ["account_id", "id"], name: "index_conversations_on_id_and_account_id"
     t.index ["account_id", "inbox_id", "status", "assignee_id"], name: "conv_acid_inbid_stat_asgnid_idx"
+    t.index ["account_id", "pipeline_stage_id", "last_activity_at", "id"], name: "index_conversations_on_stage_last_activity"
+    t.index ["account_id", "pipeline_stage_id", "pipeline_stage_changed_at"], name: "index_conversations_on_stage_changed_at"
     t.index ["account_id", "status", "created_at"], name: "index_conversations_on_account_id_status_created_at"
     t.index ["account_id", "trello_card_id"], name: "index_conversations_on_account_id_and_trello_card_id", unique: true, where: "(trello_card_id IS NOT NULL)"
     t.index ["account_id"], name: "index_conversations_on_account_id"

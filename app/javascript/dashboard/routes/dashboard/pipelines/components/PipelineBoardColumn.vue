@@ -52,6 +52,14 @@ const maybeEmitLoadMore = () => {
   }
 };
 
+// Hint de altura do card para o Virtualizer: com itemSize o virtua estima o
+// layout sem medir cada item via ResizeObserver no mount (~N observers a
+// menos em boards cheios); a medição real corrige o que divergir. 132px ≈
+// card típico (nome + 2 linhas de preview + status). Buffer em pixels (unidade
+// do virtua, default 200): 400px ≈ 3 cards de overscan — DOM vivo enxuto para
+// GPU fraca sem blank em scroll rápido.
+const CARD_ITEM_SIZE = 132;
+const COLUMN_BUFFER_SIZE = 400;
 const disconnectInfiniteScroll = () => {
   infiniteScrollObserver?.disconnect();
   infiniteScrollObserver = null;
@@ -145,6 +153,9 @@ const onDragOver = e => {
           v-if="conversations.length > 0"
           v-slot="{ item: conversation }"
           :data="conversations"
+          :item-size="CARD_ITEM_SIZE"
+          :buffer-size="COLUMN_BUFFER_SIZE"
+          :scroll-ref="scrollContainerRef"
         >
           <div class="pb-2">
             <PipelineBoardCard

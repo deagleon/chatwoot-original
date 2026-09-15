@@ -168,7 +168,7 @@ defineExpose({ open, close });
       >
         <form
           ref="dialogContentRef"
-          class="flex flex-col w-full h-auto gap-6 p-6 overflow-visible text-start align-middle transition-all duration-300 ease-in-out transform bg-n-alpha-3 backdrop-blur-[100px] shadow-xl rounded-xl max-h-[92vh]"
+          class="flex flex-col w-full h-auto gap-6 p-6 overflow-visible text-start align-middle transition-all duration-300 ease-in-out transform bg-n-alpha-3 backdrop-blur-[16px] shadow-xl rounded-xl max-h-[92vh]"
           @submit.prevent="confirm"
           @click.stop
         >

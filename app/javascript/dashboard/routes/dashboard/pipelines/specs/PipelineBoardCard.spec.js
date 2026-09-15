@@ -62,11 +62,16 @@ const mountCard = () => {
         TeleportWithDirection: {
           template: '<div><slot /></div>',
         },
+        // O menu real é async (defineAsyncComponent): o stub síncrono evita o
+        // Suspense pendente no teste e mantém o contrato de eventos.
+        ConversationContextMenu: {
+          template:
+            '<div><div @click="$emit(\'open-conversation\')">Open conversation</div><div @click="$emit(\'mark-as-read\')">Mark as read</div><div @click="$emit(\'update-conversation\', \'resolved\', null)">Mark as resolved</div></div>',
+        },
       },
     },
   });
 };
-
 const openMenu = async wrapper => {
   await wrapper
     .get('[role="button"]')
