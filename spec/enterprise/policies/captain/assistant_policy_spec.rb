@@ -24,6 +24,10 @@ RSpec.describe Captain::AssistantPolicy, type: :policy do
 
   permissions :tools? do
     context 'when Captain V2 is disabled' do
+      before do
+        account.disable_features!('captain_integration')
+      end
+
       context 'when administrator' do
         it { expect(assistant_policy).to permit(administrator_context, assistant) }
       end

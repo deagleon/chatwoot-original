@@ -25,7 +25,7 @@ RSpec.describe Llm::BaseAiService do
     end
 
     it 'uses the installation model when feature context has no account override' do
-      account.disable_features!('captain_integration_v2')
+      account.disable_features!('captain_integration')
       create(:installation_config, name: 'CAPTAIN_OPEN_AI_MODEL', value: 'gpt-4.1-nano')
 
       expect(described_class.new(feature: 'assistant', account: account).model).to eq('gpt-4.1-nano')
@@ -40,7 +40,7 @@ RSpec.describe Llm::BaseAiService do
     end
 
     it 'uses the feature default when feature context has no account override or installation model' do
-      account.disable_features!('captain_integration_v2')
+      account.disable_features!('captain_integration')
 
       expect(described_class.new(feature: 'assistant', account: account).model).to eq(Llm::Models.default_model_for('assistant'))
     end

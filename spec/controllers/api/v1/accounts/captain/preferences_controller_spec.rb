@@ -70,7 +70,7 @@ RSpec.describe 'Api::V1::Accounts::Captain::Preferences', type: :request do
       end
 
       it 'returns the assistant YAML default for V1 accounts' do
-        account.disable_features!('captain_integration_v2')
+        account.disable_features!('captain_integration')
 
         get "/api/v1/accounts/#{account.id}/captain/preferences",
             headers: admin.create_new_auth_token,
