@@ -14,6 +14,7 @@ import TeleportWithDirection from 'dashboard/components-next/TeleportWithDirecti
 const props = defineProps({
   x: { type: Number, default: 0 },
   y: { type: Number, default: 0 },
+  closeOnFocusOut: { type: Boolean, default: true },
 });
 
 const emit = defineEmits(['close']);
@@ -87,7 +88,7 @@ onMounted(() => {
   // showModal() coloca o menu no top layer do browser, acima de qualquer
   // outro dialog já aberto (ex.: o preview do pipeline board). Sem isso um
   // div fixed comum pinta atrás do top-layer e o menu "não abre".
-  dialogRef.value?.showModal();
+  dialogRef.value?.showModal?.();
   nextTick(() => menuRef.value?.focus());
 });
 
@@ -99,7 +100,7 @@ const handleClose = () => {
 const handleFocusOut = event => {
   // Keep the menu open while focus stays inside it (e.g. the label search
   // input); close it once focus leaves the menu entirely.
-  if (menuRef.value?.contains(event.relatedTarget)) {
+  if (!props.closeOnFocusOut || menuRef.value?.contains(event.relatedTarget)) {
     return;
   }
   handleClose();

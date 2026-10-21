@@ -7,7 +7,7 @@ class Messages::MessageBuilder
 
   def initialize(user, conversation, params)
     @params = params
-    @private = params[:private] || false
+    @private = ActiveModel::Type::Boolean.new.cast(params[:private]) || false
     @conversation = conversation
     @user = user
     @account = conversation.account
@@ -49,7 +49,8 @@ class Messages::MessageBuilder
   # - Attempts to parse a JSON string if content is a string.
   # - Returns an empty hash if content is not present, if there's a parsing error, or if it's an unexpected type.
   def content_attributes
-    content_attributes = convert_to_hash(@params).fetch(:content_attributes, {})
+    params = convert_to_hash(@params)
+    content_attributes = params.fetch(:content_attributes, {})
 
     return safe_parse_json(content_attributes) if content_attributes.is_a?(String)
     return content_attributes if content_attributes.is_a?(Hash)
@@ -58,9 +59,7 @@ class Messages::MessageBuilder
   end
 
   def process_attachments
-    return if @attachments.blank?
-
-    @attachments.each do |uploaded_attachment|
+    (Array(@attachments) + forwarded_attachments).each do |uploaded_attachment|
       attachment = @message.attachments.build(
         account_id: @message.account_id,
         file: uploaded_attachment
@@ -85,23 +84,48 @@ class Messages::MessageBuilder
     attachment.meta = (attachment.meta || {}).merge('is_voice_message' => true)
   end
 
+  def forwarded_message_id
+    content_attributes[:forwarded_message_id]
+  end
+
+  def forwarded_attachments
+    return [] if forwarded_message_id.blank?
+
+    forwarded_message = @conversation.messages.find(forwarded_message_id)
+    forwarded_message.attachments.where(id: @params[:forwarded_attachment_ids]).map { |attachment| attachment.file.blob }
+  end
+
+  def validate_forward
+    return if forwarded_message_id.blank?
+
+    raise StandardError, 'Forwarded emails need an email inbox' unless @conversation.inbox.email?
+    raise StandardError, 'Forwarded emails cannot be private' if @private
+    raise StandardError, 'Forwarded emails need a recipient' if process_email_string(@params[:to_emails]).empty?
+  end
+
   def process_emails
-    return unless email_inbox?
+    validate_forward
+    return unless @conversation.inbox&.inbox_type == 'Email'
 
     cc_emails = process_email_string(@params[:cc_emails])
     bcc_emails = process_email_string(@params[:bcc_emails])
     to_emails = process_email_string(@params[:to_emails])
-    validate_email_addresses(cc_emails + bcc_emails + to_emails)
+
+    all_email_addresses = cc_emails + bcc_emails + to_emails
+    validate_email_addresses(all_email_addresses)
 
     @message.content_attributes[:cc_emails] = cc_emails
     @message.content_attributes[:bcc_emails] = bcc_emails
     @message.content_attributes[:to_emails] = to_emails
+    @message.content_attributes[:email] = { subject: @params[:subject] } if @params[:subject].present? && !@private
   end
 
   def process_email_content
     return unless should_process_email_content?
 
-    @message.content_attributes[:email] = build_email_attributes
+    @message.content_attributes ||= {}
+    email_attributes = build_email_attributes
+    @message.content_attributes[:email] = email_attributes
   end
 
   def process_email_string(email_string)
@@ -177,7 +201,12 @@ class Messages::MessageBuilder
     processed_content = process_liquid_in_email_body(normalized_content)
 
     # Use custom HTML content if provided, otherwise generate from message content
-    email_attributes[:html_content] = custom_email_content_provided? ? build_custom_html_content : build_html_content(processed_content)
+    email_attributes[:html_content] = if custom_email_content_provided?
+                                        build_custom_html_content
+                                      else
+                                        build_html_content(processed_content)
+                                      end
+
     email_attributes[:text_content] = build_text_content(processed_content)
     email_attributes
   end
@@ -228,7 +257,9 @@ class Messages::MessageBuilder
   end
 
   def drops_with_sender
-    message_drops(@conversation).merge('agent' => UserDrop.new(sender))
+    message_drops(@conversation).merge({
+                                         'agent' => UserDrop.new(sender)
+                                       })
   end
 end
 

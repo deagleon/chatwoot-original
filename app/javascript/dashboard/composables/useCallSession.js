@@ -13,6 +13,8 @@ import {
 import {
   handleVoiceCallCreated,
   markCallDismissed,
+  markLocalCall,
+  clearLocalCall,
 } from 'dashboard/helper/voice';
 import { VOICE_CALL_PROVIDERS } from 'dashboard/helper/inbox';
 import {
@@ -103,6 +105,7 @@ const buildCallActions = ({ callsStore, whatsappSession, t }) => {
       TwilioVoiceClient.endClientCall();
       globalDurationTimer?.stop();
       callsStore.clearActiveCall();
+      clearLocalCall(callSid);
     }
   };
 
@@ -130,6 +133,7 @@ const buildCallActions = ({ callsStore, whatsappSession, t }) => {
           callId: call.callId,
           sdpOffer: call.sdpOffer,
           iceServers: call.iceServers,
+          recordingEnabled: call.recordingEnabled,
         });
         callsStore.setCallActive(callSid);
         globalDurationTimer?.start();
@@ -139,16 +143,26 @@ const buildCallActions = ({ callsStore, whatsappSession, t }) => {
       const device = await TwilioVoiceClient.initializeDevice(inboxId);
       if (!device) return null;
 
+      // Set BEFORE the join call lands so the account-wide voice_call.accepted
+      // broadcast — which can arrive back at this same tab before this await
+      // resolves — recognizes this as its own call instead of tearing it down
+      // (mirrors useWhatsappCallSession's activeCallId).
+      markLocalCall(callSid);
+
+      // Names the connection this join opens, so the server tells it from an earlier one
+      const attemptId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
       const joinResponse = await VoiceAPI.joinConference({
         conversationId,
         inboxId,
         callSid,
+        attemptId,
       });
 
       await TwilioVoiceClient.joinClientCall({
         to: joinResponse?.conference_sid,
         conversationId,
         callSid,
+        attemptId,
       });
 
       callsStore.setCallActive(callSid);
@@ -157,6 +171,7 @@ const buildCallActions = ({ callsStore, whatsappSession, t }) => {
       return { conferenceSid: joinResponse?.conference_sid };
     } catch (error) {
       useAlert(error?.response?.data?.error || t('CONTACT_PANEL.CALL_FAILED'));
+      if (!isWhatsappCall(call)) clearLocalCall(callSid);
       // 409 = the call already ended before accept landed (e.g. caller hung up mid-ring).
       if (error?.response?.status === 409) {
         TwilioVoiceClient.endClientCall();

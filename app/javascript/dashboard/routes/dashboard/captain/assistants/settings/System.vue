@@ -11,7 +11,9 @@ const { assistant, updateAssistant } = useAssistantSettings();
 <template>
   <SettingsPageLayout
     :heading="t('CAPTAIN.ASSISTANTS.SETTINGS.SYSTEM_SETTINGS.TITLE')"
-    :description="t('CAPTAIN.ASSISTANTS.SETTINGS.SYSTEM_SETTINGS.DESCRIPTION')"
+    :description="
+      t('CAPTAIN.ASSISTANTS.SETTINGS.SYSTEM_SETTINGS.DESCRIPTION_V2')
+    "
   >
     <AssistantSystemSettingsForm
       :assistant="assistant"

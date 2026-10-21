@@ -57,6 +57,7 @@ module Llm::Config
       RubyLLM.configure do |config|
         apply_system_credentials(config)
         config.model_registry_file = Rails.root.join('config/llm_models.json').to_s
+        config.openai_protocol = :chat_completions
         config.logger = Rails.logger
       end
     end
