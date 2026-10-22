@@ -84,9 +84,11 @@ const scrollSelectedIntoView = () => {
   });
 };
 
-onMounted(() => searchRef.value?.focus());
+const focusSearch = () => searchRef.value?.focus();
 
-defineExpose({ scrollSelectedIntoView });
+onMounted(focusSearch);
+
+defineExpose({ scrollSelectedIntoView, focusSearch });
 </script>
 
 <template>

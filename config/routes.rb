@@ -132,6 +132,7 @@ Rails.application.routes.draw do
               post :rewrite
               post :summarize
               post :reply_suggestion
+              get 'reply_suggestion/:task_id', action: :reply_suggestion_status, as: :reply_suggestion_status
               post :follow_up
             end
           end

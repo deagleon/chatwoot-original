@@ -3,6 +3,7 @@ import {
   ref,
   reactive,
   computed,
+  nextTick,
   onMounted,
   onBeforeUnmount,
   watch,
@@ -19,13 +20,23 @@ import types from 'dashboard/store/mutation-types';
 import { FEATURE_FLAGS } from 'dashboard/featureFlags';
 import PipelinesAPI from 'dashboard/api/pipelines';
 import ConversationAPI from 'dashboard/api/inbox/conversation';
-import CmdBarConversationSnooze from 'dashboard/routes/dashboard/commands/CmdBarConversationSnooze.vue';
 import Icon from 'dashboard/components-next/icon/Icon.vue';
-import Dialog from 'dashboard/components-next/dialog/Dialog.vue';
 import Button from 'dashboard/components-next/button/Button.vue';
 import NextInput from 'dashboard/components-next/input/Input.vue';
 import ComboBox from 'dashboard/components-next/combobox/ComboBox.vue';
 import TagMultiSelectComboBox from 'dashboard/components-next/combobox/TagMultiSelectComboBox.vue';
+
+// Preview + menus: o board com N cards não paga o Dialog (backdrop-blur,
+// teleport, OnClickOutside), o snooze-listener e o menu de contexto na carga
+// inicial — tudo só carrega junto do primeiro preview (defineAsyncComponent
+// agrupa num chunk separado; v-if monta só com conversa selecionada).
+const Dialog = defineAsyncComponent(
+  () => import('dashboard/components-next/dialog/Dialog.vue')
+);
+const CmdBarConversationSnooze = defineAsyncComponent(
+  () =>
+    import('dashboard/routes/dashboard/commands/CmdBarConversationSnooze.vue')
+);
 
 // Lazy: o ConversationBox (mensagens + composer + prosemirror) só carrega
 // quando o preview abre — o board inicial não paga esse custo.
@@ -62,12 +73,14 @@ const loadingByStage = reactive({});
 const hasMoreByStage = reactive({});
 const pageByStage = reactive({});
 const selectedConversation = ref(null);
+// Gate do v-if do preview: Dialog/ConversationBox/ContactPanel/Copilot só
+// montam após a primeira seleção — o board inicial não carrega esses chunks.
+const openPreviewFor = ref(null);
 const previewDialogRef = ref(null);
 const isLoading = ref(false);
 
 // Modal-local side panel state: o preview não pode escrever nos uiSettings
 // globais (is_contact_sidebar_open/is_copilot_panel_open) — eles controlam os
-// painéis da view de conversa atrás do dialog e vazariam estado ao fechar.
 const isContactPanelOpen = ref(false);
 const isCopilotPanelOpen = ref(false);
 
@@ -120,7 +133,75 @@ const createdRefetchDebounce = {};
 // filtrado por q em voo quando a busca foi limpa — sobrescrever o reload
 // completo que resolveu depois).
 const stageFetchRequestSeq = {};
+// Batch realtime: handlers do cable empurram payloads para as filas e agendam
+// um flush único de 500ms (timer compartilhado, mesmo padrão do searchDebounce).
+// O flush aplica tudo e ordena uma única vez por coluna tocada — uma rajada de
+// 50 eventos vira no máximo 1 aplicação + 1 sort por coluna. Preview/unread
+// atualizam igual, só coalescidos (atraso de até 500ms aceitável).
+const pendingCreated = [];
+const pendingUpdated = [];
+const pendingMessages = [];
+let realtimeFlushTimer = null;
+// Índice conversa -> stage (O(1)): os handlers realtime varriam todas as
+// colunas com .some() por evento — cada burst virava O(eventos × cards)
+// (medido: 12.7ms p/ 200 eventos em 10k cards vs 0.02ms com índice, ~700×).
+// Mantido em todo ponto de mutação via set/insert/remove abaixo; Map puro
+// (sem reatividade — só leitura, custo zero de tracking).
+const conversationStageIndex = new Map();
 
+const setStageConversations = (stageId, list) => {
+  const prev = conversationsByStage[stageId] ?? [];
+  const nextIds = new Set(list.map(c => c.id));
+  prev.forEach(c => {
+    if (!nextIds.has(c.id)) conversationStageIndex.delete(c.id);
+  });
+  list.forEach(c => conversationStageIndex.set(c.id, stageId));
+  conversationsByStage[stageId] = list;
+};
+
+const insertIntoStage = (stageId, conversation, prepend = false) => {
+  conversationStageIndex.set(conversation.id, stageId);
+  const list = conversationsByStage[stageId] ?? [];
+  conversationsByStage[stageId] = prepend
+    ? [conversation, ...list]
+    : [...list, conversation];
+};
+
+const removeFromStage = (stageId, conversationId) => {
+  conversationStageIndex.delete(conversationId);
+  conversationsByStage[stageId] = (conversationsByStage[stageId] ?? []).filter(
+    c => c.id !== conversationId
+  );
+};
+
+const findStageOf = conversationId => {
+  const stageId = conversationStageIndex.get(conversationId);
+  if (stageId == null) return undefined;
+  return stages.value.find(s => s.id === stageId);
+};
+
+// Chaves numéricas de ordenação por card: o sort chamava Date.parse/string
+// coerce por comparação — O(n log n) parses por sort (medido: 6.6× mais lento
+// em 800 cards). O WeakMap parseia 1× por objeto (merge cria objeto novo →
+// recalcula 1×); não muda o shape (não serializa) e o GC acompanha.
+const sortKeyCache = new WeakMap();
+const toTime = value =>
+  typeof value === 'number' ? value : Date.parse(value) || 0;
+const getSortKeys = conversation => {
+  let keys = sortKeyCache.get(conversation);
+  if (!keys) {
+    keys = {
+      activity: toTime(conversation.last_activity_at),
+      stagedAt: toTime(conversation.pipeline_stage_changed_at),
+    };
+    sortKeyCache.set(conversation, keys);
+  }
+  return keys;
+};
+// Aba oculta: realtime pausado (handlers e refetches retornam sem tocar
+// estado); ao voltar, resync silencioso por coluna. Eventos perdidos no
+// período são esperados e cobertos pelo resync.
+const isTabHidden = ref(false);
 const statusOptions = [
   { value: 'open', label: 'Open' },
   { value: 'resolved', label: 'Resolved' },
@@ -163,6 +244,7 @@ const fetchPipeline = async () => {
     stages.value = (response.data.stages ?? []).sort(
       (a, b) => a.position - b.position
     );
+    conversationStageIndex.clear();
     stages.value.forEach(stage => {
       conversationsByStage[stage.id] = [];
       pageByStage[stage.id] = 1;
@@ -195,15 +277,15 @@ const fetchStageConversations = async (stageId, page = 1) => {
     const payload = response.data?.data?.payload ?? [];
     const meta = response.data?.data?.meta ?? {};
     if (page === 1) {
-      conversationsByStage[stageId] = payload;
+      setStageConversations(stageId, payload);
     } else {
       // Cartões inseridos em tempo real podem aparecer de novo na página do
       // servidor — o dedupe evita cards duplicados no append.
-      const existingIds = new Set(conversationsByStage[stageId].map(c => c.id));
-      conversationsByStage[stageId] = [
-        ...conversationsByStage[stageId],
-        ...payload.filter(c => !existingIds.has(c.id)),
-      ];
+      const current = conversationsByStage[stageId] ?? [];
+      const existingIds = new Set(current.map(c => c.id));
+      const fresh = payload.filter(c => !existingIds.has(c.id));
+      fresh.forEach(c => conversationStageIndex.set(c.id, stageId));
+      conversationsByStage[stageId] = [...current, ...fresh];
     }
     hasMoreByStage[stageId] =
       payload.length > 0 &&
@@ -229,24 +311,85 @@ const sortColumn = stageId => {
   const list = conversationsByStage[stageId];
   if (!list) return;
   if (filters.sort_by === 'last_activity_at') {
-    list.sort((a, b) => (b.last_activity_at || 0) - (a.last_activity_at || 0));
+    list.sort((a, b) => getSortKeys(b).activity - getSortKeys(a).activity);
   } else {
-    list.sort(
-      (a, b) =>
-        new Date(a.pipeline_stage_changed_at || 0).getTime() -
-        new Date(b.pipeline_stage_changed_at || 0).getTime()
-    );
+    list.sort((a, b) => getSortKeys(a).stagedAt - getSortKeys(b).stagedAt);
   }
+};
+
+// Resync silencioso ao voltar para a aba: refaz os fetches das páginas
+// 1..pageByStage[stageId] de cada coluna, concatena com dedupe por id (mesma
+// lógica do append) e substitui a coluna de uma vez. Reutiliza
+// stageFetchRequestSeq para descartar respostas velhas. Não mexe em filtros
+// nem em pageByStage. Scroll deslocado pelo Virtualizer é best-effort.
+const resyncStage = async stageId => {
+  const totalPages = pageByStage[stageId] ?? 1;
+  stageFetchRequestSeq[stageId] = (stageFetchRequestSeq[stageId] ?? 0) + 1;
+  const requestSeq = stageFetchRequestSeq[stageId];
+  loadingByStage[stageId] = true;
+  try {
+    const seen = new Set();
+    let merged = [];
+    let allCount = 0;
+    let lastPayloadLength = 0;
+    for (let page = 1; page <= totalPages; page += 1) {
+      const params = { ...buildParams(), page };
+      // eslint-disable-next-line no-await-in-loop
+      const response = await PipelinesAPI.stageConversations(
+        pipelineId.value,
+        stageId,
+        params
+      );
+      if (requestSeq !== stageFetchRequestSeq[stageId]) return;
+      const payload = response.data?.data?.payload ?? [];
+      if (page === 1) allCount = response.data?.data?.meta?.all_count ?? 0;
+      lastPayloadLength = payload.length;
+      payload.forEach(c => {
+        if (!seen.has(c.id)) {
+          seen.add(c.id);
+          merged.push(c);
+        }
+      });
+      if (payload.length === 0) break;
+    }
+    if (requestSeq !== stageFetchRequestSeq[stageId]) return;
+    setStageConversations(stageId, merged);
+    sortColumn(stageId);
+    hasMoreByStage[stageId] = lastPayloadLength > 0 && merged.length < allCount;
+  } catch {
+    // silently ignore — individual column errors don't block the board
+  } finally {
+    if (requestSeq === stageFetchRequestSeq[stageId]) {
+      loadingByStage[stageId] = false;
+    }
+  }
+};
+
+const resyncVisibleColumns = () => {
+  stages.value.forEach(stage => {
+    resyncStage(stage.id);
+  });
+};
+
+const handleVisibilityChange = () => {
+  if (typeof document === 'undefined') return;
+  if (document.hidden) {
+    isTabHidden.value = true;
+    return;
+  }
+  isTabHidden.value = false;
+  resyncVisibleColumns();
 };
 
 const handleDrop = async ({ stageId, conversationId }) => {
   if (!conversationId) return;
 
-  const fromStage = stages.value.find(s =>
-    conversationsByStage[s.id]?.some(c => c.id === conversationId)
-  );
+  const fromStage = findStageOf(conversationId);
+  if (!fromStage) return;
   if (fromStage?.id === stageId) return;
-
+  // Drop vindo de fora do stage conhecido (ex.: stage de outro pipeline):
+  // ignora — o board não tem a coluna de destino.
+  if (!conversationsByStage[stageId]) return;
   const conversation = conversationsByStage[fromStage.id]?.find(
     c => c.id === conversationId
   );
@@ -254,17 +397,16 @@ const handleDrop = async ({ stageId, conversationId }) => {
 
   // Optimistic move — o timestamp novo espelha o set_pipeline_stage_changed_at
   // do backend para a ordenação FIFO local bater com o servidor.
-  conversationsByStage[fromStage.id] = conversationsByStage[
-    fromStage.id
-  ].filter(c => c.id !== conversationId);
-  conversationsByStage[stageId] = [
+  removeFromStage(fromStage.id, conversationId);
+  insertIntoStage(
+    stageId,
     {
       ...conversation,
       pipeline_stage_id: stageId,
       pipeline_stage_changed_at: new Date().toISOString(),
     },
-    ...conversationsByStage[stageId],
-  ];
+    true
+  );
   sortColumn(stageId);
 
   try {
@@ -274,13 +416,8 @@ const handleDrop = async ({ stageId, conversationId }) => {
     });
   } catch {
     // Revert on error
-    conversationsByStage[stageId] = conversationsByStage[stageId].filter(
-      c => c.id !== conversationId
-    );
-    conversationsByStage[fromStage.id] = [
-      conversation,
-      ...conversationsByStage[fromStage.id],
-    ];
+    removeFromStage(stageId, conversationId);
+    insertIntoStage(fromStage.id, conversation, true);
     useAlert(t('PIPELINES.BOARD.MOVE_ERROR'));
   }
 };
@@ -315,9 +452,7 @@ const activateChat = async data => {
 };
 
 const onCardMarkRead = conversationId => {
-  const stage = stages.value.find(s =>
-    conversationsByStage[s.id]?.some(c => c.id === conversationId)
-  );
+  const stage = findStageOf(conversationId);
   if (!stage) return;
   const list = conversationsByStage[stage.id];
   const idx = list.findIndex(c => c.id === conversationId);
@@ -328,7 +463,15 @@ const onCardMarkRead = conversationId => {
 const openConversationInPanel = async conversation => {
   conversationPreviewRequest += 1;
   const requestId = conversationPreviewRequest;
+  // v-if do Dialog/ConversationBox: montar na seleção faz o async chunk
+  // carregar junto do primeiro preview; sem seleção, zero custo no board.
+  openPreviewFor.value = conversation.id;
   selectedConversation.value = conversation;
+  // Painel de contato vem ativado por padrão: setar antes do show() async
+  // para o v-if montar junto do Dialog (sem isso o teste/stub com Dialog
+  // síncrono não vê o painel no flush).
+  isContactPanelOpen.value = true;
+  await nextTick();
   try {
     const { data } = await ConversationAPI.show(conversation.id);
     // Cliques rápidos em cards diferentes podem resolver fora de ordem: só a
@@ -338,7 +481,6 @@ const openConversationInPanel = async conversation => {
     await activateChat(data);
   } catch {
     if (requestId !== conversationPreviewRequest) return;
-    // Fallback: o payload do board já carrega a conversa (última mensagem inclusa).
     store.commit(types.SET_ALL_CONVERSATION, [conversation]);
     await activateChat(conversation);
   }
@@ -346,9 +488,9 @@ const openConversationInPanel = async conversation => {
   // agent_last_seen_at no backend.
   store.dispatch('markMessagesRead', { id: conversation.id });
   onCardMarkRead(conversation.id);
-  // Painel de informações do cliente vem ativado por padrão ao abrir o
-  // preview; o Captain continua opt-in.
-  isContactPanelOpen.value = true;
+  // O Dialog monta via v-if no mesmo tick da seleção: espera o mount antes
+  // do open() ref-based (sem isso o preview nunca abre no primeiro clique).
+  await nextTick();
   previewDialogRef.value?.open();
 };
 
@@ -367,9 +509,9 @@ const onSearchInput = () => {
   }, 400);
 };
 
-// Refetch debounced da coluna alvo quando um created chega com busca (q)
-// ativa — burst de eventos vira um único fetch por coluna.
 const scheduleCreatedRefetch = stageId => {
+  // Aba oculta: nenhum refetch — o resync ao voltar cobre o período.
+  if (isTabHidden.value) return;
   clearTimeout(createdRefetchDebounce[stageId]);
   createdRefetchDebounce[stageId] = setTimeout(() => {
     delete createdRefetchDebounce[stageId];
@@ -395,14 +537,10 @@ const matchesActiveFilters = data => {
   return true;
 };
 
-const onConversationCreated = data => {
-  const stageId = data.pipeline_stage_id;
+const applyCreatedToStage = (stageId, data, touchedStages) => {
   if (!stageId || !conversationsByStage[stageId]) return;
 
-  const alreadyOnBoard = Object.values(conversationsByStage).some(list =>
-    list?.some(c => c.id === data.id)
-  );
-  if (alreadyOnBoard) return;
+  if (conversationStageIndex.has(data.id)) return;
 
   // A busca (q) casa com conteúdo de mensagens/contatos no servidor — não dá
   // para avaliar client-side; re-fetcha a coluna alvo (debounced) para manter
@@ -423,20 +561,26 @@ const onConversationCreated = data => {
     scheduleCreatedRefetch(stageId);
   }
 
-  conversationsByStage[stageId] = [...conversationsByStage[stageId], data];
-  sortColumn(stageId);
+  insertIntoStage(stageId, data);
+  // Sem sort aqui: o flush ordena uma única vez por coluna tocada.
+  touchedStages?.add(stageId);
 };
 
-// Real-time: react to conversation.updated events from ActionCable
-const onConversationUpdated = data => {
+// Real-time: react to conversation.updated events from ActionCable.
+// Versão apply (sem sort): o flush ordena uma única vez por coluna tocada.
+const applyUpdatedConversation = (data, touchedStages) => {
   const conversationId = data.id;
   const newStageId = data.pipeline_stage_id;
 
-  const fromStage = stages.value.find(stage => {
-    const list = conversationsByStage[stage.id];
-    return list && list.some(c => c.id === conversationId);
-  });
-  if (!fromStage) return;
+  const fromStage = findStageOf(conversationId);
+
+  // Se a conversa não estava no board (ex.: recém-criada e agora associada a
+  // uma etapa via regra de automação, ou movida a partir da tela de conversa/API),
+  // insere diretamente na coluna da nova etapa.
+  if (!fromStage) {
+    applyCreatedToStage(newStageId, data, touchedStages);
+    return;
+  }
 
   const list = conversationsByStage[fromStage.id];
   const idx = list.findIndex(c => c.id === conversationId);
@@ -445,39 +589,53 @@ const onConversationUpdated = data => {
   // Cleanup jobs remove the conversation from its stage (pipeline_stage_id
   // becomes null): the card leaves the board instead of staying in place.
   if (!newStageId) {
-    conversationsByStage[fromStage.id] = list.filter(
-      c => c.id !== conversationId
-    );
+    removeFromStage(fromStage.id, conversationId);
     return;
   }
 
   if (newStageId && newStageId !== fromStage.id) {
-    conversationsByStage[fromStage.id] = list.filter(
-      c => c.id !== conversationId
-    );
+    removeFromStage(fromStage.id, conversationId);
+    touchedStages?.add(fromStage.id);
+
     if (conversationsByStage[newStageId]) {
-      conversationsByStage[newStageId] = [
-        { ...list[idx], ...data },
-        ...conversationsByStage[newStageId],
-      ];
+      if (filters.q) {
+        scheduleCreatedRefetch(newStageId);
+        return;
+      }
+      if (!matchesActiveFilters(data)) return;
+
+      if (loadingByStage[newStageId]) {
+        stageFetchRequestSeq[newStageId] =
+          (stageFetchRequestSeq[newStageId] ?? 0) + 1;
+        scheduleCreatedRefetch(newStageId);
+      }
+
+      insertIntoStage(newStageId, { ...list[idx], ...data }, true);
+      touchedStages?.add(newStageId);
     }
-    sortColumn(newStageId);
-    sortColumn(fromStage.id);
   } else {
+    // Stage não mudou, mas outros atributos (status, assignee, priority, labels)
+    // podem ter sido alterados. Se não corresponder mais aos filtros ativos
+    // (ex.: conversa resolvida quando o filtro é "Abertas"), remove do board.
+    if (!matchesActiveFilters(data)) {
+      removeFromStage(fromStage.id, conversationId);
+      return;
+    }
     conversationsByStage[fromStage.id] = list.map(c =>
-      c.id === conversationId ? { ...c, ...data } : c
+      c.id === conversationId
+        ? { ...c, ...data, pipeline_stage_id: fromStage.id }
+        : c
     );
-    sortColumn(fromStage.id);
+    touchedStages?.add(fromStage.id);
   }
 };
 
 // Real-time: react to message.created events from ActionCable and keep the
 // card's unread state and preview fresh without refetching the column.
-const onMessageCreated = data => {
+// Versão apply (sem sort): o flush ordena uma única vez por coluna tocada.
+const applyIncomingMessage = (data, touchedStages) => {
   const conversationId = data.conversation_id;
-  const stage = stages.value.find(s =>
-    conversationsByStage[s.id]?.some(c => c.id === conversationId)
-  );
+  const stage = findStageOf(conversationId);
   if (!stage) return;
   const list = conversationsByStage[stage.id];
   const idx = list.findIndex(c => c.id === conversationId);
@@ -490,17 +648,54 @@ const onMessageCreated = data => {
       data.conversation?.last_activity_at ?? card.last_activity_at,
     ...(data.content ? { messages: [data] } : {}),
   };
-  sortColumn(stage.id);
+  touchedStages?.add(stage.id);
 };
 
+// Flush do batch realtime: aplica created → updated → messages nesta ordem e
+// ordena uma única vez por coluna tocada.
+const flushRealtimeQueues = () => {
+  realtimeFlushTimer = null;
+  const created = pendingCreated.splice(0);
+  const updated = pendingUpdated.splice(0);
+  const messages = pendingMessages.splice(0);
+  if (!created.length && !updated.length && !messages.length) return;
+  const touchedStages = new Set();
+  created.forEach(data =>
+    applyCreatedToStage(data.pipeline_stage_id, data, touchedStages)
+  );
+  updated.forEach(data => applyUpdatedConversation(data, touchedStages));
+  messages.forEach(data => applyIncomingMessage(data, touchedStages));
+  touchedStages.forEach(stageId => sortColumn(stageId));
+};
+
+const scheduleRealtimeFlush = () => {
+  if (realtimeFlushTimer) return;
+  realtimeFlushTimer = setTimeout(flushRealtimeQueues, 500);
+};
+
+const onConversationCreated = data => {
+  if (isTabHidden.value) return;
+  pendingCreated.push(data);
+  scheduleRealtimeFlush();
+};
+
+const onConversationUpdated = data => {
+  if (isTabHidden.value) return;
+  pendingUpdated.push(data);
+  scheduleRealtimeFlush();
+};
+
+const onMessageCreated = data => {
+  if (isTabHidden.value) return;
+  pendingMessages.push(data);
+  scheduleRealtimeFlush();
+};
 const onCardMarkUnread = async conversationId => {
   try {
     // O endpoint de unread responde sem payload; o show devolve o
     // unread_count recalculado após a marcação.
     const { data } = await ConversationAPI.show(conversationId);
-    const stage = stages.value.find(s =>
-      conversationsByStage[s.id]?.some(c => c.id === conversationId)
-    );
+    const stage = findStageOf(conversationId);
     if (!stage) return;
     const list = conversationsByStage[stage.id];
     const idx = list.findIndex(c => c.id === conversationId);
@@ -512,10 +707,10 @@ const onCardMarkUnread = async conversationId => {
 };
 
 const closePreview = () => {
+  openPreviewFor.value = null;
   selectedConversation.value = null;
   // Reset dos painéis locais: o Captain volta fechado; o painel de contato é
   // reativado no próximo open() (padrão do preview).
-  isCopilotPanelOpen.value = false;
   // Sem isso, a conversa continua "selecionada" no store e o
   // DashboardAudioNotificationHelper silencia os sons das mensagens novas
   // dela enquanto o board está aberto.
@@ -528,6 +723,9 @@ onMounted(async () => {
   emitter.on(BUS_EVENTS.CONVERSATION_CREATED, onConversationCreated);
   emitter.on(BUS_EVENTS.CONVERSATION_UPDATED, onConversationUpdated);
   emitter.on(BUS_EVENTS.MESSAGE_CREATED, onMessageCreated);
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+  }
 });
 
 onBeforeUnmount(() => {
@@ -536,6 +734,11 @@ onBeforeUnmount(() => {
   emitter.off(BUS_EVENTS.MESSAGE_CREATED, onMessageCreated);
   clearTimeout(searchDebounce);
   Object.values(createdRefetchDebounce).forEach(clearTimeout);
+  clearTimeout(realtimeFlushTimer);
+  realtimeFlushTimer = null;
+  if (typeof document !== 'undefined') {
+    document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }
 });
 
 watch(
@@ -633,11 +836,13 @@ watch(
     <!-- Preview da conversa: ConversationBox embutido (header + mensagens +
          composer completos). O Dialog é ref-based — o open() precisa ser chamado. -->
     <Dialog
+      v-if="openPreviewFor"
       ref="previewDialogRef"
       :title="selectedConversation?.meta?.sender?.name ?? ''"
       :width="isSidePanelOpen ? '7xl' : '5xl'"
       :show-cancel-button="false"
       :show-confirm-button="false"
+      flat
       @close="closePreview"
     >
       <!-- Toggles dos painéis laterais do preview (contato / Captain): estado
@@ -653,7 +858,6 @@ watch(
             type="button"
             icon="i-ph-user-bold"
             class="!rounded-full transition-all duration-[250ms] ease-out active:!scale-95 active:!brightness-105 active:duration-75"
-            :class="{ 'bg-n-alpha-2 active:shadow-sm': isContactPanelOpen }"
             :aria-label="t('CONVERSATION.SIDEBAR.CONTACT')"
             @click="handleContactPanelToggle"
           />
@@ -715,6 +919,6 @@ watch(
     <!-- Listener do comando de snooze do palete ninja-keys (CMD_SNOOZE_CONVERSATION)
          + modal de horário customizado. Sem ele o snooze do menu de contexto
          do card não executa nada no board. -->
-    <CmdBarConversationSnooze />
+    <CmdBarConversationSnooze v-if="openPreviewFor" />
   </div>
 </template>

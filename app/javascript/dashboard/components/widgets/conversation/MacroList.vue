@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, onMounted } from 'vue';
+import { computed, ref, watch, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useStore, useMapGetter } from 'dashboard/composables/store';
 import { useOrderedMacros } from 'dashboard/composables/useOrderedMacros';
@@ -29,6 +29,15 @@ const uiFlags = useMapGetter('macros/getUIFlags');
 
 // The trigger can already be followed by text, from a draft or a caret moved back onto it
 const searchQuery = ref(props.searchKey);
+
+// Keystrokes can keep landing in the composer instead of the picker's search
+// field; mirroring the trigger text keeps the list filtering as the user types.
+watch(
+  () => props.searchKey,
+  value => {
+    searchQuery.value = value;
+  }
+);
 
 const searchTerm = computed(() => searchQuery.value.trim().toLowerCase());
 

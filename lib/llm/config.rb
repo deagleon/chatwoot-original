@@ -19,7 +19,7 @@ module Llm::Config
       @initialized = false
     end
 
-    def with_api_key(api_key, api_base: nil)
+    def with_api_key(api_key, api_base: nil, request_timeout: 12, max_retries: 0)
       initialize!
       context = RubyLLM.context do |config|
         config.openai_api_key = api_key
@@ -28,6 +28,10 @@ module Llm::Config
         # registry provider is "openrouter" require these keys.
         config.openrouter_api_key = api_key
         config.openrouter_api_base = api_base
+        # Fail fast below the rack-timeout (15s default) so slow LLM calls
+        # surface as a catchable Faraday timeout instead of a 500.
+        config.request_timeout = request_timeout
+        config.max_retries = max_retries
       end
 
       yield context

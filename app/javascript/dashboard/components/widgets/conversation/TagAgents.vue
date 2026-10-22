@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useStoreGetters, useMapGetter } from 'dashboard/composables/store';
 import { useKeyboardEvents } from 'dashboard/composables/useKeyboardEvents';
@@ -28,6 +28,15 @@ const teams = useMapGetter('teams/getTeams');
 const isRTL = useMapGetter('accounts/isRTL');
 
 const searchQuery = ref(props.searchKey);
+
+// Keystrokes can keep landing in the composer instead of the picker's search
+// field; mirroring the trigger text keeps the list filtering as the user types.
+watch(
+  () => props.searchKey,
+  value => {
+    searchQuery.value = value;
+  }
+);
 
 const searchTerm = computed(() => searchQuery.value.trim().toLowerCase());
 

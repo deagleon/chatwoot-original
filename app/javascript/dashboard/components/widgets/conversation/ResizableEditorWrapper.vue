@@ -45,7 +45,7 @@ const sizeBounds = computed(() => {
   const expanded = clamp(Math.floor(h * EXPAND_RATIO - s / 2), MIN_HEIGHT, max);
   return {
     min: MIN_HEIGHT,
-    max: isContainerReady.value ? max : DEFAULT_HEIGHT,
+    max: isContainerReady.value ? max : FALLBACK_MAX_HEIGHT,
     expanded,
     default: clamp(DEFAULT_HEIGHT, MIN_HEIGHT, max),
   };
@@ -214,8 +214,8 @@ defineExpose({ toggleEditorExpand, resetEditorHeight });
     @apply overflow-auto;
 
     height: clamp(
-      var(--editor-min-allowed, 5rem),
-      var(--editor-height, 5rem),
+      var(--editor-min-allowed, 4rem),
+      var(--editor-height, 4rem),
       var(--editor-max-allowed, 7.5rem)
     );
     transition:

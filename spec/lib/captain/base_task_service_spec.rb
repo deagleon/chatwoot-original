@@ -122,6 +122,7 @@ RSpec.describe Captain::BaseTaskService do
     before do
       allow(Llm::Config).to receive(:with_api_key).and_yield(mock_context)
       allow(mock_chat).to receive(:with_instructions)
+      allow(mock_chat).to receive(:before_tool_call).and_return(mock_chat)
       allow(mock_chat).to receive(:ask).and_return(mock_response)
     end
 
@@ -225,6 +226,51 @@ RSpec.describe Captain::BaseTaskService do
 
       expect(result[:message]).to eq('complete' => true)
     end
+
+    context 'when the model exceeds the tool-call ceiling' do
+      before do
+        tool_callback = nil
+        allow(mock_chat).to receive(:before_tool_call) { |&block| tool_callback = block }
+        allow(mock_chat).to receive(:ask) do
+          (described_class::MAX_TOOL_CALLS + 1).times { tool_callback.call }
+          mock_response
+        end
+      end
+
+      it 'returns the friendly generation error instead of raising' do
+        expect { service.send(:make_api_call, model: model, messages: messages) }.not_to raise_error
+
+        result = service.send(:make_api_call, model: model, messages: messages)
+        expect(result[:error]).to eq(I18n.t('captain.generation_failed'))
+      end
+    end
+
+    context 'when tool calls stay within the ceiling' do
+      before do
+        tool_callback = nil
+        allow(mock_chat).to receive(:before_tool_call) { |&block| tool_callback = block }
+        allow(mock_chat).to receive(:ask) do
+          2.times { tool_callback.call }
+          mock_response
+        end
+      end
+
+      it 'succeeds normally' do
+        result = service.send(:make_api_call, model: model, messages: messages)
+
+        expect(result[:message]).to eq('Response')
+      end
+    end
+
+    context 'when the model returns no text' do
+      let(:mock_response) { instance_double(RubyLLM::Message, content: '', tokens: RubyLLM::Tokens.new(input: 10, output: 0)) }
+
+      it 'returns the friendly generation error instead of a blank message' do
+        result = service.send(:make_api_call, model: model, messages: messages)
+
+        expect(result[:error]).to eq(I18n.t('captain.generation_failed'))
+      end
+    end
   end
 
   describe 'chat setup' do
@@ -235,6 +281,7 @@ RSpec.describe Captain::BaseTaskService do
 
     before do
       allow(Llm::Config).to receive(:with_api_key).and_yield(mock_context)
+      allow(mock_chat).to receive(:before_tool_call).and_return(mock_chat)
     end
 
     context 'with system instructions' do
@@ -311,7 +358,7 @@ RSpec.describe Captain::BaseTaskService do
     it 'tracks exceptions against the system key when an account hook exists' do
       create(:integrations_hook, :openai, account: account, settings: { 'api_key' => 'hook-key' })
 
-      expect(Llm::Config).to receive(:with_api_key).with('test-key', api_base: anything).and_raise(error)
+      expect(Llm::Config).to receive(:with_api_key).with('test-key', api_base: anything, request_timeout: 12).and_raise(error)
       expect(ChatwootExceptionTracker).to receive(:new).with(error, account: account).and_return(exception_tracker)
       expect(exception_tracker).to receive(:capture_exception)
 

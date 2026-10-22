@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, defineAsyncComponent, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useStore, useMapGetter } from 'dashboard/composables/store';
 import { frontendURL, conversationUrl } from 'dashboard/helper/URLHelper';
@@ -8,7 +8,6 @@ import Icon from 'dashboard/components-next/icon/Icon.vue';
 import Avatar from 'dashboard/components-next/avatar/Avatar.vue';
 import UnreadBadge from 'dashboard/components-next/Conversation/ConversationCard/UnreadBadge.vue';
 import ContextMenu from 'dashboard/components/ui/ContextMenu.vue';
-import ConversationContextMenu from 'dashboard/components/widgets/conversation/contextMenu/Index.vue';
 
 const props = defineProps({
   conversation: {
@@ -28,6 +27,13 @@ const emit = defineEmits([
   'markUnread',
 ]);
 
+// Menu pesado (528 linhas: busca de agentes/teams/labels + pico-search): só
+// carrega no primeiro right-click — o board com N cards não paga N menus no
+// bundle/inicialização. Async + v-if: zero custo até abrir.
+const ConversationContextMenu = defineAsyncComponent(
+  () =>
+    import('dashboard/components/widgets/conversation/contextMenu/Index.vue')
+);
 const { t } = useI18n();
 const store = useStore();
 const accountId = useMapGetter('getCurrentAccountId');
@@ -38,8 +44,6 @@ const unreadCount = computed(() => props.conversation.unread_count || 0);
 const contact = computed(() => props.conversation?.meta?.sender ?? {});
 const contactName = computed(() => contact.value?.name ?? '');
 const contactThumbnail = computed(() => contact.value?.thumbnail ?? '');
-const contactStatus = computed(() => contact.value?.availability_status);
-
 const lastMessage = computed(() => {
   const messages = props.conversation?.messages;
   if (!messages?.length) return '';
@@ -224,8 +228,8 @@ const onKeydown = e => {
         :name="contactName"
         :src="contactThumbnail"
         :size="24"
-        :status="contactStatus"
         rounded-full
+        hide-offline-status
       />
       <span class="text-sm font-medium truncate text-n-slate-12 flex-1">
         {{ contactName }}
@@ -233,7 +237,7 @@ const onKeydown = e => {
       <UnreadBadge v-if="hasUnread" :count="unreadCount" />
       <span
         v-if="isScheduled"
-        v-tooltip.top="t('PIPELINES.BOARD.CARD.SCHEDULED')"
+        :title="t('PIPELINES.BOARD.CARD.SCHEDULED')"
         class="flex items-center justify-center size-4 text-n-amber-11"
       >
         <Icon icon="i-lucide-bell" class="size-3" />
@@ -265,26 +269,28 @@ const onKeydown = e => {
     :y="contextMenu.y"
     @close="closeContextMenu"
   >
-    <ConversationContextMenu
-      :chat-id="conversation.id"
-      :status="conversation.status"
-      :has-unread-messages="(conversation.unread_count || 0) > 0"
-      :inbox-id="conversation.inbox_id"
-      :priority="conversation.priority"
-      :conversation-labels="conversation.labels || []"
-      :conversation-url="conversationPath"
-      :allowed-options="allowedOptions"
-      @open-conversation="onOpenConversation"
-      @update-conversation="onUpdateConversation"
-      @assign-priority="onAssignPriority"
-      @mark-as-unread="onMarkAsUnread"
-      @mark-as-read="onMarkAsRead"
-      @assign-agent="onAssignAgent"
-      @assign-team="onAssignTeam"
-      @assign-label="onAssignLabel"
-      @remove-label="onRemoveLabel"
-      @delete-conversation="onDeleteConversation"
-      @close="closeContextMenu"
-    />
+    <Suspense>
+      <ConversationContextMenu
+        :chat-id="conversation.id"
+        :status="conversation.status"
+        :has-unread-messages="(conversation.unread_count || 0) > 0"
+        :inbox-id="conversation.inbox_id"
+        :priority="conversation.priority"
+        :conversation-labels="conversation.labels || []"
+        :conversation-url="conversationPath"
+        :allowed-options="allowedOptions"
+        @open-conversation="onOpenConversation"
+        @update-conversation="onUpdateConversation"
+        @assign-priority="onAssignPriority"
+        @mark-as-unread="onMarkAsUnread"
+        @mark-as-read="onMarkAsRead"
+        @assign-agent="onAssignAgent"
+        @assign-team="onAssignTeam"
+        @assign-label="onAssignLabel"
+        @remove-label="onRemoveLabel"
+        @delete-conversation="onDeleteConversation"
+        @close="closeContextMenu"
+      />
+    </Suspense>
   </ContextMenu>
 </template>

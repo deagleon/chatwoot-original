@@ -79,6 +79,8 @@ class ActionService
     action_params = params.first
     return if action_params.blank?
 
+    action_params = action_params.with_indifferent_access if action_params.respond_to?(:with_indifferent_access)
+
     stage = @account.pipeline_stages.find_by(id: action_params[:stage_id], pipeline_id: action_params[:pipeline_id])
     return if stage.blank? || @conversation.pipeline_stage_id == stage.id
 

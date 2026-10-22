@@ -12,6 +12,7 @@ module RequestExceptionHandler
     rescue_from CustomExceptions::Inbox::LimitExceeded,
                 CustomExceptions::Account::EmailLimitExceeded,
                 with: :render_error_response
+    rescue_from 'Rack::Timeout::RequestTimeoutException', with: :render_timeout_error
   end
 
   private
@@ -66,6 +67,11 @@ module RequestExceptionHandler
   def render_error_response(exception)
     log_handled_error(exception)
     render json: exception.to_hash, status: exception.http_status
+  end
+
+  def render_timeout_error(exception)
+    log_handled_error(exception)
+    render json: { error: I18n.t('captain.timeout') }, status: :service_unavailable
   end
 
   def log_handled_error(exception)

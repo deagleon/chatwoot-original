@@ -10,6 +10,11 @@ class Captain::BaseTaskService
   TOKEN_LIMIT = 400_000
   GPT_MODEL = Llm::Config::DEFAULT_MODEL
 
+  # Legitimate flows use 1 tool round (search -> answer); 5 is headroom, not a knob.
+  MAX_TOOL_CALLS = 5
+
+  class TooManyToolCalls < StandardError; end
+
   # Prepend enterprise module to subclasses when they're defined.
   # This ensures the enterprise perform wrapper is applied even when
   # subclasses define their own perform method, since prepend puts
@@ -51,6 +56,15 @@ class Captain::BaseTaskService
       execute_ruby_llm_request(model: model, messages: messages, schema: schema, tools: tools, feature: feature)
     end
 
+    finalize_response(response, messages)
+  end
+
+  # A tool-augmented generation can resolve with no text at all (e.g. a
+  # tool-call payload truncated at the token cap); that is useless to the
+  # agent, so fail with the friendly error instead of a blank suggestion.
+  def finalize_response(response, messages)
+    blank_failure = { error: I18n.t('captain.generation_failed'), request_messages: messages }
+    return blank_failure if response[:error].blank? && response[:message].blank?
     return response unless build_follow_up_context? && response[:message].present?
 
     response.merge(follow_up_context: build_follow_up_context(messages, response))
@@ -66,10 +80,21 @@ class Captain::BaseTaskService
     InstallationConfig.find_by(name: 'CAPTAIN_OPEN_AI_MODEL')&.value.presence || route[:model]
   end
 
+  # Override point: scopes that tolerate slower responses (e.g. background
+  # jobs outside the rack-timeout wall) raise this instead of failing fast.
+  def request_timeout
+    12
+  end
+
+  # Override point for bounding completion size per task type.
+  def max_output_tokens
+    nil
+  end
+
   def execute_ruby_llm_request(model:, messages:, schema: nil, tools: [], feature: nil)
     credential = llm_credential
 
-    Llm::Config.with_api_key(credential[:api_key], api_base: api_base) do |context|
+    Llm::Config.with_api_key(credential[:api_key], api_base: api_base, request_timeout: request_timeout) do |context|
       chat = build_chat(context, model: model, messages: messages, schema: schema, tools: tools, feature: feature)
 
       conversation_messages = messages.reject { |m| m[:role] == 'system' }
@@ -78,6 +103,12 @@ class Captain::BaseTaskService
       add_messages_if_needed(chat, conversation_messages)
       build_ruby_llm_response(chat.ask(conversation_messages.last[:content]), messages, schema: schema)
     end
+  rescue Faraday::TimeoutError, Timeout::Error => e
+    capture_llm_exception(e, credential: credential)
+    { error: I18n.t('captain.timeout'), request_messages: messages }
+  rescue TooManyToolCalls => e
+    capture_llm_exception(e, credential: credential)
+    { error: I18n.t('captain.generation_failed'), request_messages: messages }
   rescue StandardError => e
     capture_llm_exception(e, credential: credential)
     { error: e.message, request_messages: messages }
@@ -87,6 +118,8 @@ class Captain::BaseTaskService
     tools = request.fetch(:tools, [])
     options = Captain::ResponsesConfig.options(model: model, temperature: nil, feature: request[:feature])
     chat = Llm::Config.chat(context: context, model: model, **options.slice(:protocol))
+    chat.with_max_output_tokens(max_output_tokens) if max_output_tokens
+    guard_tool_call_ceiling(chat)
     system_msg = messages.find { |m| m[:role] == 'system' }
     chat.with_instructions(system_msg[:content]) if system_msg
     chat.with_schema(request[:schema]) if request[:schema]
@@ -97,6 +130,17 @@ class Captain::BaseTaskService
     end
 
     chat
+  end
+
+  # RubyLLM auto-executes model tool calls in-process and re-completes with
+  # no round guard, each round resetting the per-request budget; bound the
+  # whole generation so a looping model fails friendly instead of spinning.
+  def guard_tool_call_ceiling(chat)
+    tool_calls = 0
+    chat.before_tool_call do
+      tool_calls += 1
+      raise TooManyToolCalls, "exceeded #{MAX_TOOL_CALLS} model tool calls" if tool_calls > MAX_TOOL_CALLS
+    end
   end
 
   def add_messages_if_needed(chat, conversation_messages)

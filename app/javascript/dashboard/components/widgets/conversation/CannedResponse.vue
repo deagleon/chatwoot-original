@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, onMounted } from 'vue';
+import { computed, ref, watch, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { picoSearch } from '@chatwoot/pico-search';
 import { useStore, useMapGetter } from 'dashboard/composables/store';
@@ -43,6 +43,16 @@ const cannedResponses = useMapGetter('getCannedResponses');
 const uiFlags = useMapGetter('getUIFlags');
 // The trigger can already be followed by text, from a draft or a caret moved back onto it
 const searchQuery = ref(props.searchKey);
+
+// If the keystrokes keep landing in the composer instead of the picker's search
+// field, the trigger text still reaches us through this prop. Mirror it so the
+// list filters by what was typed rather than staying on the full list.
+watch(
+  () => props.searchKey,
+  value => {
+    searchQuery.value = value;
+  }
+);
 
 const searchTerm = computed(() => searchQuery.value.trim());
 
