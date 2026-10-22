@@ -1,18 +1,10 @@
 import { shallowMount } from '@vue/test-utils';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createStore } from 'vuex';
+import { ref } from 'vue';
+import { CONTACT_CONVERSATION_NAVIGATION } from 'dashboard/composables/useContactConversationNavigation';
 import MessagesView from '../MessagesView.vue';
 
-// useLabelSuggestions/useAccount disparam computeds que dependem de
-// integrations/getAppIntegrations e da rota — fora do escopo deste spec
-// (scroll), então mockamos os dois na fonte.
-vi.mock('dashboard/composables/useLabelSuggestions', () => ({
-  useLabelSuggestions: () => ({
-    captainTasksEnabled: { value: false },
-    isLabelSuggestionFeatureEnabled: { value: false },
-    getLabelSuggestions: vi.fn(async () => []),
-  }),
-}));
 vi.mock('vue-router', () => ({
   useRoute: () => ({ params: {}, query: {} }),
 }));
@@ -51,15 +43,27 @@ const buildStore = () =>
     },
   });
 
+const contactConversationNavigation = {
+  olderConversation: ref(null),
+  newerConversation: ref(null),
+  isReadingHistory: ref(false),
+  latestConversation: ref(null),
+  leaveReadingMode: vi.fn(),
+  openConversation: vi.fn(),
+  buildConversationPath: vi.fn(),
+};
+
 const mountView = store =>
   shallowMount(MessagesView, {
     global: {
       plugins: [store],
+      provide: {
+        [CONTACT_CONVERSATION_NAVIGATION]: contactConversationNavigation,
+      },
       stubs: {
         MessageList: { template: '<div class="conversation-panel" />' },
         ReplyBox: { template: '<div />' },
         Banner: { template: '<div />' },
-        ConversationLabelSuggestion: { template: '<div />' },
         Spinner: { template: '<div />' },
         ResizableEditorWrapper: { template: '<div><slot /></div>' },
         ScheduledMessagesTimeline: { template: '<div />' },
