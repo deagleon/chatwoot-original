@@ -5,6 +5,13 @@ on:
     branches:
       - develop
       - master
+    paths:
+      - '.dockerignore'
+      - '.github/workflows/test_docker_build.yml'
+      - 'docker/**'
+      - 'Gemfile*'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
   workflow_dispatch:
 
 permissions:
@@ -12,21 +19,10 @@ permissions:
 
 jobs:
   test-build:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: linux/amd64
-            runner: ubuntu-latest
-          - platform: linux/arm64
-            runner: ubuntu-22.04-arm
-    runs-on: ${{ matrix.runner }}
+    runs-on: ubuntu-22.04-arm
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -36,8 +32,8 @@ jobs:
         with:
           context: .
           file: docker/Dockerfile
-          platforms: ${{ matrix.platform }}
+          platforms: linux/arm64
           push: false
           load: false
-          cache-from: type=gha,scope=${{ matrix.platform }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.platform }}
+          cache-from: type=gha,scope=linux/arm64
+          cache-to: type=gha,mode=max,scope=linux/arm64
