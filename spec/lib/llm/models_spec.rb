@@ -52,6 +52,12 @@ RSpec.describe Llm::Models do
     end
   end
 
+  describe '.temperature_for' do
+    it 'keeps the configured temperature for models outside the registry' do
+      expect(described_class.temperature_for('anthropic/claude-haiku-5.5', 0.7)).to eq(0.7)
+    end
+  end
+
   describe '.feature_config' do
     it 'returns model metadata for a feature' do
       config = described_class.feature_config('editor')
