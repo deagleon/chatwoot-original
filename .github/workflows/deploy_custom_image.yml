@@ -3,6 +3,7 @@ name: Build and Push Custom Docker Image
 on:
   push:
     branches:
+      - develop
       - sync/upstream-develop-validation
       - master
       - main
@@ -41,8 +42,9 @@ jobs:
         with:
           images: ${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=latest
+            type=ref,event=branch
             type=sha,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
