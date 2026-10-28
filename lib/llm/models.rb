@@ -39,6 +39,8 @@ module Llm::Models
 
     def temperature_for(model_name, temperature)
       temperature unless RubyLLM.models.find(model_name).metadata[:temperature] == false
+    rescue RubyLLM::ModelNotFoundError
+      temperature
     end
 
     def feature_config(feature_key)
