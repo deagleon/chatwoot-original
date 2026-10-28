@@ -1,5 +1,10 @@
 <script setup>
-import router from '../../routes/index';
+import { useRouter } from 'vue-router';
+
+// useRouter() em vez do import da instância (routes/index): o import direto
+// criava um ciclo de módulos (BackButton → routes → ... → ConversationHeader →
+// BackButton) que estourava TDZ em carregamentos lazy (ex.: preview do board).
+const router = useRouter();
 const props = defineProps({
   backUrl: {
     type: [String, Object],

@@ -13,6 +13,27 @@ import { FEATURE_FLAGS } from 'dashboard/featureFlags';
 import TasksAPI from 'dashboard/api/captain/tasks';
 import { CAPTAIN_ERROR_TYPES } from 'dashboard/composables/captain/constants';
 
+const REPLY_SUGGESTION_POLL_INTERVAL = 2000;
+const REPLY_SUGGESTION_POLL_TIMEOUT = 120000;
+
+const sleepWithAbort = (ms, signal) =>
+  new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException('Aborted', 'AbortError'));
+      return;
+    }
+    let timer;
+    function onAbort() {
+      clearTimeout(timer);
+      reject(new DOMException('Aborted', 'AbortError'));
+    }
+    timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+
 export function useCaptain() {
   const store = useStore();
   const { t } = useI18n();
@@ -152,6 +173,33 @@ export function useCaptain() {
   };
 
   /**
+   * Polls an async reply suggestion task until completion, failure, timeout,
+   * or abort. Reuses handleAPIError/getErrorType via axios-shaped errors.
+   */
+  async function pollReplySuggestionResult(taskId, signal) {
+    const startedAt = Date.now();
+    for (;;) {
+      // eslint-disable-next-line no-await-in-loop
+      const { data } = await TasksAPI.replySuggestionStatus(taskId, signal);
+      if (data.status === 'completed' || data.message) {
+        return {
+          message: data.message,
+          followUpContext: data.follow_up_context,
+        };
+      }
+      if (data.status === 'failed' || data.error) {
+        const error = new Error(data.error);
+        error.response = { data, status: 422 };
+        throw error;
+      }
+      if (Date.now() - startedAt > REPLY_SUGGESTION_POLL_TIMEOUT) {
+        throw new Error('Reply suggestion timed out');
+      }
+      // eslint-disable-next-line no-await-in-loop
+      await sleepWithAbort(REPLY_SUGGESTION_POLL_INTERVAL, signal);
+    }
+  }
+  /**
    * Gets a reply suggestion for the current conversation.
    * @param {Object} [options={}] - Additional options.
    * @param {AbortSignal} [options.signal] - AbortSignal to cancel the request.
@@ -159,14 +207,18 @@ export function useCaptain() {
    */
   const getReplySuggestion = async (options = {}) => {
     try {
-      const result = await TasksAPI.replySuggestion(
+      const { data } = await TasksAPI.replySuggestion(
         conversationId.value,
         options.signal
       );
-      const {
-        data: { message: generatedMessage, follow_up_context: followUpContext },
-      } = result;
-      return { message: generatedMessage, followUpContext };
+      if (!data.task_id) {
+        // Fallback for unexpected sync-shaped responses.
+        return {
+          message: data.message,
+          followUpContext: data.follow_up_context,
+        };
+      }
+      return await pollReplySuggestionResult(data.task_id, options.signal);
     } catch (error) {
       handleAPIError(error);
       return { message: '', errorType: getErrorType(error) };

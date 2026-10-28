@@ -14,6 +14,7 @@ import TeleportWithDirection from 'dashboard/components-next/TeleportWithDirecti
 const props = defineProps({
   x: { type: Number, default: 0 },
   y: { type: Number, default: 0 },
+  closeOnFocusOut: { type: Boolean, default: true },
 });
 
 const emit = defineEmits(['close']);
@@ -21,6 +22,7 @@ const emit = defineEmits(['close']);
 const elementToLock = inject('contextMenuElementTarget', null);
 
 const menuRef = useTemplateRef('menuRef');
+const dialogRef = useTemplateRef('dialogRef');
 
 const scrollLockElement = computed(() => {
   if (!elementToLock?.value) return null;
@@ -50,7 +52,18 @@ const calculatePosition = (x, y, menuW, menuH, windowW, windowH) => {
 };
 
 const position = computed(() => {
-  if (!menuRef.value) return { top: `${props.y}px`, left: `${props.x}px` };
+  // right/bottom/margin resetam o posicionamento centralizado do UA
+  // stylesheet do dialog — sem eles left/top não ancoram o menu no clique
+  // (o inset oposto fica 0 e as margens auto redistribuem o espaço).
+  if (!menuRef.value) {
+    return {
+      top: `${props.y}px`,
+      left: `${props.x}px`,
+      right: 'auto',
+      bottom: 'auto',
+      margin: 0,
+    };
+  }
 
   const { left, top } = calculatePosition(
     props.x,
@@ -64,11 +77,18 @@ const position = computed(() => {
   return {
     top: `${top}px`,
     left: `${left}px`,
+    right: 'auto',
+    bottom: 'auto',
+    margin: 0,
   };
 });
 
 onMounted(() => {
   isLocked.value = true;
+  // showModal() coloca o menu no top layer do browser, acima de qualquer
+  // outro dialog já aberto (ex.: o preview do pipeline board). Sem isso um
+  // div fixed comum pinta atrás do top-layer e o menu "não abre".
+  dialogRef.value?.showModal?.();
   nextTick(() => menuRef.value?.focus());
 });
 
@@ -80,10 +100,18 @@ const handleClose = () => {
 const handleFocusOut = event => {
   // Keep the menu open while focus stays inside it (e.g. the label search
   // input); close it once focus leaves the menu entirely.
-  if (menuRef.value?.contains(event.relatedTarget)) {
+  if (!props.closeOnFocusOut || menuRef.value?.contains(event.relatedTarget)) {
     return;
   }
   handleClose();
+};
+
+const handleBackdropClick = event => {
+  // Cliques no ::backdrop chegam com o próprio <dialog> como target; cliques
+  // no conteúdo borram para os filhos.
+  if (event.target === dialogRef.value) {
+    handleClose();
+  }
 };
 
 onUnmounted(() => {
@@ -93,14 +121,21 @@ onUnmounted(() => {
 
 <template>
   <TeleportWithDirection to="body">
-    <div
-      ref="menuRef"
-      class="fixed outline-none z-[9999] cursor-pointer"
+    <dialog
+      ref="dialogRef"
+      class="w-fit h-fit max-w-none max-h-none overflow-visible border-0 bg-transparent p-0 outline-none cursor-pointer backdrop:bg-transparent"
       :style="position"
-      tabindex="0"
-      @focusout="handleFocusOut"
+      @click="handleBackdropClick"
+      @close="handleClose"
     >
-      <slot />
-    </div>
+      <div
+        ref="menuRef"
+        class="outline-none cursor-pointer"
+        tabindex="0"
+        @focusout="handleFocusOut"
+      >
+        <slot />
+      </div>
+    </dialog>
   </TeleportWithDirection>
 </template>

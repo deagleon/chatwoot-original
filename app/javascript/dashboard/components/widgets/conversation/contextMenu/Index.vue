@@ -2,12 +2,13 @@
 import { mapGetters } from 'vuex';
 import { useAdmin } from 'dashboard/composables/useAdmin';
 import { useAlert } from 'dashboard/composables';
+import ConversationAPI from 'dashboard/api/inbox/conversation';
 import { copyTextToClipboard } from 'shared/helpers/clipboard';
 import {
   getSortedAgentsByAvailability,
   getAgentsByUpdatedPresence,
 } from 'dashboard/helper/agentHelper.js';
-import { picoSearch } from '@scmmishra/pico-search';
+import { picoSearch } from '@chatwoot/pico-search';
 import MenuItem from './menuItem.vue';
 import MenuItemWithSubmenu from './menuItemWithSubmenu.vue';
 import wootConstants from 'dashboard/constants/globals';
@@ -16,6 +17,7 @@ import NextInput from 'dashboard/components-next/input/Input.vue';
 import Icon from 'dashboard/components-next/icon/Icon.vue';
 
 const MENU = {
+  OPEN_CONVERSATION: 'open-conversation',
   MARK_AS_READ: 'mark-as-read',
   MARK_AS_UNREAD: 'mark-as-unread',
   PRIORITY: 'priority',
@@ -27,6 +29,7 @@ const MENU = {
   DELETE: 'delete',
   OPEN_NEW_TAB: 'open-new-tab',
   COPY_LINK: 'copy-link',
+  MOVE_TO_PIPELINE: 'move-to-pipeline',
 };
 
 export default {
@@ -72,6 +75,7 @@ export default {
     },
   },
   emits: [
+    'openConversation',
     'updateConversation',
     'assignPriority',
     'markAsUnread',
@@ -94,6 +98,11 @@ export default {
       MENU,
       labelSearchQuery: '',
       STATUS_TYPE: wootConstants.STATUS_TYPE,
+      openConversationOption: {
+        key: MENU.OPEN_CONVERSATION,
+        label: this.$t('CONVERSATION.CARD_CONTEXT_MENU.OPEN_CONVERSATION'),
+        icon: 'open',
+      },
       readOption: {
         label: this.$t('CONVERSATION.CARD_CONTEXT_MENU.MARK_AS_READ'),
         icon: 'mail',
@@ -190,7 +199,24 @@ export default {
       assignableAgentsUiFlags: 'inboxAssignableAgents/getUIFlags',
       currentUser: 'getCurrentUser',
       currentAccountId: 'getCurrentAccountId',
+      pipelines: 'pipelines/getPipelines',
     }),
+    moveToPipelineConfig() {
+      return {
+        key: MENU.MOVE_TO_PIPELINE,
+        icon: 'arrow-right-import',
+        label: this.$t('CONVERSATION.CARD_CONTEXT_MENU.MOVE_TO_PIPELINE'),
+        options: (this.pipelines || []).map(pipeline => ({
+          key: pipeline.id,
+          label: pipeline.name,
+          icon: 'arrow-right-import',
+          options: (pipeline.stages || []).map(stage => ({
+            key: stage.id,
+            label: stage.name,
+          })),
+        })),
+      };
+    },
     filteredAgentOnAvailability() {
       const agents = this.$store.getters[
         'inboxAssignableAgents/getAssignableAgents'
@@ -233,6 +259,9 @@ export default {
   },
   mounted() {
     this.$store.dispatch('inboxAssignableAgents/fetch', [this.inboxId]);
+    if (!this.pipelines?.length) {
+      this.$store.dispatch('pipelines/get');
+    }
   },
   methods: {
     isAllowed(keys) {
@@ -249,6 +278,25 @@ export default {
     },
     assignPriority(priority) {
       this.$emit('assignPriority', priority);
+    },
+    async moveToStage(pipelineStageId) {
+      try {
+        await ConversationAPI.moveToStage({
+          conversationId: this.chatId,
+          pipelineStageId,
+        });
+        useAlert(
+          this.$t(
+            'CONVERSATION.CARD_CONTEXT_MENU.PIPELINE_STAGE_MOVE.SUCCESFUL'
+          )
+        );
+      } catch (error) {
+        useAlert(
+          this.$t('CONVERSATION.CARD_CONTEXT_MENU.PIPELINE_STAGE_MOVE.FAILED')
+        );
+      } finally {
+        this.$emit('close');
+      }
     },
     deleteConversation() {
       this.$emit('deleteConversation', this.chatId);
@@ -297,6 +345,14 @@ export default {
   <div
     class="p-1 rounded-md shadow-xl bg-n-alpha-3/50 backdrop-blur-[100px] outline-1 outline outline-n-weak/50"
   >
+    <template v-if="isAllowed([MENU.OPEN_CONVERSATION])">
+      <MenuItem
+        :option="openConversationOption"
+        variant="icon"
+        @click.stop="$emit('openConversation')"
+      />
+      <hr class="m-1 rounded border-b border-n-weak dark:border-n-weak" />
+    </template>
     <template v-if="isAllowed([MENU.MARK_AS_READ, MENU.MARK_AS_UNREAD])">
       <MenuItem
         v-if="!hasUnreadMessages"
@@ -420,6 +476,29 @@ export default {
           :option="generateMenuLabelConfig(team, 'team')"
           @click.stop="$emit('assignTeam', team)"
         />
+      </MenuItemWithSubmenu>
+      <hr class="m-1 rounded border-b border-n-weak dark:border-n-weak" />
+    </template>
+    <template
+      v-if="
+        isAllowed([MENU.MOVE_TO_PIPELINE]) &&
+        moveToPipelineConfig.options.length
+      "
+    >
+      <MenuItemWithSubmenu :option="moveToPipelineConfig" :scrollable="false">
+        <MenuItemWithSubmenu
+          v-for="pipeline in moveToPipelineConfig.options"
+          :key="pipeline.key"
+          :option="pipeline"
+          :scrollable="false"
+        >
+          <MenuItem
+            v-for="stage in pipeline.options"
+            :key="stage.key"
+            :option="stage"
+            @click.stop="moveToStage(stage.key)"
+          />
+        </MenuItemWithSubmenu>
       </MenuItemWithSubmenu>
       <hr class="m-1 rounded border-b border-n-weak dark:border-n-weak" />
     </template>

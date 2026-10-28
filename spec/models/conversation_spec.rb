@@ -16,13 +16,107 @@ RSpec.describe Conversation do
     it { is_expected.to belong_to(:contact) }
     it { is_expected.to belong_to(:contact_inbox) }
     it { is_expected.to belong_to(:assignee).optional }
+    it { is_expected.to belong_to(:ai_assignee).optional }
     it { is_expected.to belong_to(:team).optional }
     it { is_expected.to belong_to(:campaign).optional }
+    it { is_expected.to belong_to(:pipeline_stage).optional }
   end
 
   describe 'concerns' do
     it_behaves_like 'assignment_handler'
     it_behaves_like 'auto_assignment_handler'
+  end
+
+  describe '#move_to_stage!' do
+    let(:account) { create(:account) }
+    let(:inbox) { create(:inbox, account: account) }
+    let(:conversation) do
+      create(:conversation, account: account, contact: create(:contact, account: account), inbox: inbox)
+    end
+    let(:pipeline) { create(:pipeline, account: account) }
+    let(:stage) { pipeline.pipeline_stages.first }
+
+    before do
+      allow(Rails.configuration.dispatcher).to receive(:dispatch)
+    end
+
+    it 'sets pipeline_stage_id' do
+      conversation.move_to_stage!(stage)
+      expect(conversation.reload.pipeline_stage_id).to eq(stage.id)
+    end
+
+    it 'sets pipeline_stage_changed_at' do
+      conversation.move_to_stage!(stage)
+      expect(conversation.reload.pipeline_stage_changed_at).to be_present
+    end
+
+    it 'does not alter status' do
+      original_status = conversation.status
+      conversation.move_to_stage!(stage)
+      expect(conversation.reload.status).to eq(original_status)
+    end
+
+    it 'does not alter assignee' do
+      conversation.move_to_stage!(stage)
+      expect(conversation.reload.assignee_id).to be_nil
+    end
+
+    it 'does not alter inbox' do
+      original_inbox_id = conversation.inbox_id
+      conversation.move_to_stage!(stage)
+      expect(conversation.reload.inbox_id).to eq(original_inbox_id)
+    end
+  end
+
+  describe 'pipeline_stage cross-account validation' do
+    let(:account) { create(:account) }
+    let(:other_account) { create(:account) }
+    let(:inbox) { create(:inbox, account: account) }
+    let(:conversation) do
+      create(:conversation, account: account, contact: create(:contact, account: account), inbox: inbox)
+    end
+    let(:other_pipeline) { create(:pipeline, account: other_account) }
+    let(:other_stage) { other_pipeline.pipeline_stages.first }
+
+    it 'rejects a stage from a different account' do
+      conversation.pipeline_stage = other_stage
+      expect(conversation).not_to be_valid
+      expect(conversation.errors[:pipeline_stage]).to be_present
+    end
+
+    it 'accepts a stage from the same account' do
+      pipeline = create(:pipeline, account: account)
+      conversation.pipeline_stage = pipeline.pipeline_stages.first
+      expect(conversation).to be_valid
+    end
+  end
+
+  describe 'pipeline_stage_changed_at callback' do
+    let(:account) { create(:account) }
+    let(:inbox) { create(:inbox, account: account) }
+    let(:conversation) do
+      create(:conversation, account: account, contact: create(:contact, account: account), inbox: inbox)
+    end
+    let(:pipeline) { create(:pipeline, account: account) }
+    let(:stage) { pipeline.pipeline_stages.first }
+
+    before do
+      allow(Rails.configuration.dispatcher).to receive(:dispatch)
+    end
+
+    it 'sets pipeline_stage_changed_at when pipeline_stage_id changes' do
+      conversation.update!(pipeline_stage: stage)
+      expect(conversation.reload.pipeline_stage_changed_at).to be_present
+    end
+
+    it 'does not change pipeline_stage_changed_at when pipeline_stage_id is unchanged' do
+      conversation.update!(pipeline_stage: stage)
+      original = conversation.reload.pipeline_stage_changed_at
+      travel_to(1.hour.from_now) do
+        conversation.update!(priority: :high)
+      end
+      expect(conversation.reload.pipeline_stage_changed_at).to eq(original)
+    end
   end
 
   describe '.before_create' do
@@ -70,6 +164,17 @@ RSpec.describe Conversation do
       expect(Rails.configuration.dispatcher).to have_received(:dispatch)
         .with(described_class::CONVERSATION_CREATED, kind_of(Time), conversation: conversation, notifiable_assignee_change: false,
                                                                     changed_attributes: nil, performed_by: nil)
+    end
+
+    it 'marks a visitor contact as a lead' do
+      expect(conversation.contact.reload).to be_lead
+    end
+
+    it 'does not change the contact type of a customer' do
+      customer = create(:contact, account: account, contact_type: :customer)
+      create(:conversation, account: account, contact: customer, inbox: inbox)
+
+      expect(customer.reload).to be_customer
     end
   end
 
@@ -192,6 +297,17 @@ RSpec.describe Conversation do
       expect(Rails.configuration.dispatcher).to have_received(:dispatch)
         .with(described_class::CONVERSATION_UPDATED, kind_of(Time), conversation: conversation, notifiable_assignee_change: true,
                                                                     changed_attributes: changed_attributes, performed_by: nil)
+    end
+
+    it 'dispatches an assignee changed event when an agent bot is assigned' do
+      conversation = create(:conversation, status: 'open', account: account)
+      agent_bot = create(:agent_bot, account: account)
+
+      conversation.update!(ai_assignee: agent_bot)
+
+      expect(Rails.configuration.dispatcher).to have_received(:dispatch)
+        .with(described_class::ASSIGNEE_CHANGED, kind_of(Time), conversation: conversation, notifiable_assignee_change: false,
+                                                                changed_attributes: conversation.previous_changes, performed_by: nil)
     end
 
     it 'will not run conversation_updated event for empty updates' do
@@ -409,17 +525,25 @@ RSpec.describe Conversation do
     end
 
     it 'clears agent bot ownership' do
-      conversation.update!(assignee_agent_bot: create(:agent_bot, account: conversation.account))
+      conversation.update!(ai_assignee: create(:agent_bot, account: conversation.account))
 
       conversation.bot_handoff!
 
-      expect(conversation.reload.assignee_agent_bot).to be_nil
+      expect(conversation.reload.ai_assignee).to be_nil
     end
 
     it 'dispatches CONVERSATION_BOT_HANDOFF event' do
       expect(Rails.configuration.dispatcher).to receive(:dispatch)
         .with(described_class::CONVERSATION_BOT_HANDOFF, anything, hash_including(conversation: conversation))
       conversation.bot_handoff!
+    end
+
+    it 'does not hand off or dispatch when the conversation is no longer pending' do
+      conversation.open!
+
+      expect(Rails.configuration.dispatcher).not_to receive(:dispatch)
+      expect(conversation.bot_handoff!).to be(false)
+      expect(conversation.reload.status).to eq('open')
     end
   end
 
@@ -728,7 +852,7 @@ RSpec.describe Conversation do
     end
 
     it 'sets connected agent bot as the conversation owner' do
-      expect(conversation.assignee_agent_bot).to eq(bot_inbox.agent_bot)
+      expect(conversation.ai_assignee).to eq(bot_inbox.agent_bot)
       expect(conversation.assignee).to be_nil
     end
 
@@ -737,7 +861,7 @@ RSpec.describe Conversation do
       conversation = create(:conversation, inbox: bot_inbox.inbox, assignee: agent)
 
       expect(conversation.assignee).to eq(agent)
-      expect(conversation.assignee_agent_bot).to be_nil
+      expect(conversation.ai_assignee).to be_nil
     end
 
     context 'with campaigns' do
@@ -747,14 +871,14 @@ RSpec.describe Conversation do
         campaign = create(:campaign, inbox: bot_inbox.inbox, account: bot_inbox.inbox.account, sender: user)
         conversation = create(:conversation, inbox: bot_inbox.inbox, campaign: campaign)
         expect(conversation.status).to eq('open')
-        expect(conversation.assignee_agent_bot).to be_nil
+        expect(conversation.ai_assignee).to be_nil
       end
 
       it 'returns conversation as pending if campaign has no sender (bot-initiated) and bot is active' do
         campaign = create(:campaign, inbox: bot_inbox.inbox, account: bot_inbox.inbox.account, sender: nil)
         conversation = create(:conversation, inbox: bot_inbox.inbox, campaign: campaign)
         expect(conversation.status).to eq('pending')
-        expect(conversation.assignee_agent_bot).to eq(bot_inbox.agent_bot)
+        expect(conversation.ai_assignee).to eq(bot_inbox.agent_bot)
       end
     end
 
@@ -787,7 +911,7 @@ RSpec.describe Conversation do
     end
 
     it 'does not set agent bot ownership' do
-      expect(conversation.assignee_agent_bot).to be_nil
+      expect(conversation.ai_assignee).to be_nil
     end
   end
 

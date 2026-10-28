@@ -11,6 +11,12 @@ defineProps({
     type: Boolean,
     default: true,
   },
+  // Submenus aninhados precisam transbordar o container; desative o scroll
+  // quando o submenu contém outros submenus (o overflow cliparia o filho).
+  scrollable: {
+    type: Boolean,
+    default: true,
+  },
 });
 
 const menuRef = useTemplateRef('menuRef');
@@ -50,8 +56,11 @@ const submenuPosition = computed(() => [
     <fluent-icon icon="chevron-right" size="12" />
     <div
       v-if="subMenuAvailable"
-      class="submenu bg-n-alpha-3 backdrop-blur-[100px] p-1 shadow-lg rounded-md absolute hidden max-h-[15rem] overflow-y-auto overflow-x-hidden cursor-pointer"
-      :class="submenuPosition"
+      class="submenu bg-n-alpha-3 backdrop-blur-[100px] p-1 shadow-lg rounded-md absolute hidden cursor-pointer"
+      :class="[
+        submenuPosition,
+        scrollable ? 'max-h-[15rem] overflow-y-auto overflow-x-hidden' : '',
+      ]"
     >
       <slot />
     </div>

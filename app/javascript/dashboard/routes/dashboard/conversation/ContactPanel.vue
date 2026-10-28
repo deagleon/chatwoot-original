@@ -24,6 +24,7 @@ import ShopifyOrdersList from 'dashboard/components/widgets/conversation/Shopify
 import SidebarActionsHeader from 'dashboard/components-next/SidebarActionsHeader.vue';
 import LinearIssuesList from 'dashboard/components/widgets/conversation/linear/IssuesList.vue';
 import LinearSetupCTA from 'dashboard/components/widgets/conversation/linear/LinearSetupCTA.vue';
+import StripeCustomer from 'dashboard/components/widgets/conversation/StripeCustomer.vue';
 
 const props = defineProps({
   conversationId: {
@@ -34,13 +35,24 @@ const props = defineProps({
     type: Number,
     default: undefined,
   },
+  // When embedded (e.g. inside the pipeline board preview dialog), closing
+  // via the header X emits `close` instead of writing the global uiSettings
+  // that control the conversation-view sidebar. Default behavior (dashboard
+  // sidebar usage) stays unchanged.
+  embedded: {
+    type: Boolean,
+    default: false,
+  },
 });
+
+const emit = defineEmits(['close']);
 
 const {
   updateUISettings,
   isContactSidebarItemOpen,
   conversationSidebarItemsOrder,
   toggleSidebarUIState,
+  isOnExpandedLayout,
 } = useUISettings();
 
 const dragging = ref(false);
@@ -75,6 +87,10 @@ const isLinearConnected = computed(
 );
 
 const store = useStore();
+const stripeIntegration = useFunctionGetter(
+  'integrations/getIntegration',
+  'stripe'
+);
 const currentChat = useMapGetter('getSelectedChat');
 const conversationId = computed(() => props.conversationId);
 const conversationMetadataGetter = useMapGetter(
@@ -94,6 +110,14 @@ const contactId = computed(() => currentChat.value.meta?.sender?.id);
 const contact = computed(() => contactGetter.value(contactId.value));
 const contactAdditionalAttributes = computed(
   () => contact.value.additional_attributes || {}
+);
+
+const appliedContactFilter = useMapGetter('getAppliedContactFilter');
+
+const isListScopedToContact = computed(
+  () =>
+    !isOnExpandedLayout.value &&
+    appliedContactFilter.value?.id === contactId.value
 );
 
 const getContactDetails = () => {
@@ -116,6 +140,11 @@ const onDragEnd = () => {
 };
 
 const closeContactPanel = () => {
+  // Embedded instances must not touch the global sidebar UI settings.
+  if (props.embedded) {
+    emit('close');
+    return;
+  }
   updateUISettings({
     is_contact_sidebar_open: false,
     is_copilot_panel_open: false,
@@ -126,8 +155,7 @@ onMounted(() => {
   conversationSidebarItems.value = conversationSidebarItemsOrder.value;
   getContactDetails();
   store.dispatch('attributes/get', 0);
-  // Load integrations to ensure linear integration state is available
-  store.dispatch('integrations/get', 'linear');
+  store.dispatch('integrations/get');
 });
 </script>
 
@@ -214,13 +242,14 @@ onMounted(() => {
                 attribute-type="contact_attribute"
                 attribute-from="conversation_contact_panel"
                 :contact-id="contact.id"
-                :empty-state-message="
-                  $t('CONVERSATION_CUSTOM_ATTRIBUTES.NO_RECORDS_FOUND')
-                "
               />
             </AccordionItem>
           </div>
-          <div v-else-if="element.name === 'previous_conversation'">
+          <div
+            v-else-if="
+              element.name === 'previous_conversation' && !isListScopedToContact
+            "
+          >
             <AccordionItem
               v-if="contact.id"
               :title="
@@ -284,6 +313,28 @@ onMounted(() => {
               "
             >
               <ShopifyOrdersList :contact-id="contactId" />
+            </AccordionItem>
+          </div>
+          <div
+            v-else-if="
+              element.name === 'stripe_customer' &&
+              isCloudFeatureEnabled(FEATURE_FLAGS.STRIPE) &&
+              stripeIntegration.enabled
+            "
+          >
+            <AccordionItem
+              :title="$t('STRIPE_INTEGRATION.TITLE')"
+              :is-open="isContactSidebarItemOpen('is_stripe_customer_open')"
+              compact
+              @toggle="
+                value => toggleSidebarUIState('is_stripe_customer_open', value)
+              "
+            >
+              <StripeCustomer
+                v-if="isContactSidebarItemOpen('is_stripe_customer_open')"
+                :conversation-id="conversationId"
+                :contact-email="contact.email"
+              />
             </AccordionItem>
           </div>
           <div v-else-if="element.name === 'contact_notes'">

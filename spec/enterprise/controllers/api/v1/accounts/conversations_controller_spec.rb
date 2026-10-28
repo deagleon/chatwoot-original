@@ -5,6 +5,16 @@ RSpec.describe 'Conversations API', type: :request do
   let(:administrator) { create(:user, account: account, role: :administrator) }
 
   describe 'GET /api/v1/accounts/{account.id}/conversations/:id' do
+    it 'omits a missing Captain assistant owner' do
+      conversation = create(:conversation, account: account)
+      conversation.update!(ai_assignee_type: 'Captain::Assistant', assignee_agent_bot_id: -1)
+
+      get "/api/v1/accounts/#{account.id}/conversations/#{conversation.display_id}", headers: administrator.create_new_auth_token
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body['meta'].keys).not_to include('assignee', 'assignee_type')
+    end
+
     it 'returns SLA data for the conversation if the feature is enabled' do
       account.enable_features!('sla')
       conversation = create(:conversation, account: account)
@@ -259,6 +269,134 @@ RSpec.describe 'Conversations API', type: :request do
 
         expect(json_response).to be_an(Array)
         expect(json_response.size).to eq(3)
+      end
+    end
+  end
+
+  describe 'POST /api/v1/accounts/:account_id/conversations/:id/pipeline_stage' do
+    let!(:account) { create(:account) }
+    let!(:admin) { create(:user, account: account, role: :administrator) }
+    let!(:agent) { create(:user, account: account, role: :agent) }
+    let!(:pipeline) { create(:pipeline, account: account) }
+    let!(:source_stage) { pipeline.pipeline_stages.first }
+    let!(:target_stage) { pipeline.pipeline_stages.second }
+    let!(:conversation) { create(:conversation, account: account, pipeline_stage: source_stage) }
+
+    before do
+      account.enable_features!('pipeline')
+    end
+
+    context 'when agent has conversation_participating_manage without participation' do
+      before do
+        create(:inbox_member, user: agent, inbox: conversation.inbox)
+        custom_role = create(:custom_role, account: account, permissions: ['conversation_participating_manage'])
+        account.account_users.find_by(user_id: agent.id).update!(custom_role: custom_role)
+      end
+
+      it 'returns unauthorized' do
+        post "/api/v1/accounts/#{account.id}/conversations/#{conversation.display_id}/pipeline_stage",
+             headers: agent.create_new_auth_token,
+             params: { pipeline_stage_id: target_stage.id }, as: :json
+
+        expect(response).to have_http_status(:unauthorized)
+        expect(conversation.reload.pipeline_stage_id).to eq(source_stage.id)
+      end
+    end
+
+    context 'when agent is assigned to the conversation' do
+      before do
+        conversation.update!(assignee: agent)
+        custom_role = create(:custom_role, account: account, permissions: ['conversation_participating_manage'])
+        account.account_users.find_by(user_id: agent.id).update!(custom_role: custom_role)
+      end
+
+      it 'moves the conversation to the target stage' do
+        post "/api/v1/accounts/#{account.id}/conversations/#{conversation.display_id}/pipeline_stage",
+             headers: agent.create_new_auth_token,
+             params: { pipeline_stage_id: target_stage.id }, as: :json
+
+        expect(response).to have_http_status(:success)
+        expect(conversation.reload.pipeline_stage_id).to eq(target_stage.id)
+      end
+    end
+
+    context 'when agent is a conversation participant' do
+      before do
+        # ConversationParticipant valida inbox access do usuário; sem o inbox
+        # member o setup é inválido (RecordInvalid).
+        create(:inbox_member, user: agent, inbox: conversation.inbox)
+        create(:conversation_participant, conversation: conversation, account: account, user: agent)
+        custom_role = create(:custom_role, account: account, permissions: ['conversation_participating_manage'])
+        account.account_users.find_by(user_id: agent.id).update!(custom_role: custom_role)
+      end
+
+      it 'moves the conversation to the target stage' do
+        post "/api/v1/accounts/#{account.id}/conversations/#{conversation.display_id}/pipeline_stage",
+             headers: agent.create_new_auth_token,
+             params: { pipeline_stage_id: target_stage.id }, as: :json
+
+        expect(response).to have_http_status(:success)
+        expect(conversation.reload.pipeline_stage_id).to eq(target_stage.id)
+      end
+    end
+
+    context 'when administrator' do
+      it 'moves the conversation to the target stage' do
+        post "/api/v1/accounts/#{account.id}/conversations/#{conversation.display_id}/pipeline_stage",
+             headers: admin.create_new_auth_token,
+             params: { pipeline_stage_id: target_stage.id }, as: :json
+
+        expect(response).to have_http_status(:success)
+        expect(conversation.reload.pipeline_stage_id).to eq(target_stage.id)
+      end
+    end
+
+    context 'when agent has conversation_manage without inbox access' do
+      before do
+        custom_role = create(:custom_role, account: account, permissions: ['conversation_manage'])
+        account.account_users.find_by(user_id: agent.id).update!(custom_role: custom_role)
+      end
+
+      it 'denies the move (permissão ampla não fura o escopo por inbox)' do
+        post "/api/v1/accounts/#{account.id}/conversations/#{conversation.display_id}/pipeline_stage",
+             headers: agent.create_new_auth_token,
+             params: { pipeline_stage_id: target_stage.id }, as: :json
+
+        expect(response).to have_http_status(:unauthorized)
+        expect(conversation.reload.pipeline_stage_id).to eq(source_stage.id)
+      end
+    end
+
+    context 'when agent has conversation_manage with inbox access' do
+      before do
+        create(:inbox_member, user: agent, inbox: conversation.inbox)
+        custom_role = create(:custom_role, account: account, permissions: ['conversation_manage'])
+        account.account_users.find_by(user_id: agent.id).update!(custom_role: custom_role)
+      end
+
+      it 'moves the conversation to the target stage' do
+        post "/api/v1/accounts/#{account.id}/conversations/#{conversation.display_id}/pipeline_stage",
+             headers: agent.create_new_auth_token,
+             params: { pipeline_stage_id: target_stage.id }, as: :json
+
+        expect(response).to have_http_status(:success)
+        expect(conversation.reload.pipeline_stage_id).to eq(target_stage.id)
+      end
+    end
+
+    context 'when agent has conversation_unassigned_manage without inbox access' do
+      before do
+        custom_role = create(:custom_role, account: account, permissions: ['conversation_unassigned_manage'])
+        account.account_users.find_by(user_id: agent.id).update!(custom_role: custom_role)
+      end
+
+      it 'denies the move (permissão ampla não fura o escopo por inbox)' do
+        post "/api/v1/accounts/#{account.id}/conversations/#{conversation.display_id}/pipeline_stage",
+             headers: agent.create_new_auth_token,
+             params: { pipeline_stage_id: target_stage.id }, as: :json
+
+        expect(response).to have_http_status(:unauthorized)
+        expect(conversation.reload.pipeline_stage_id).to eq(source_stage.id)
       end
     end
   end

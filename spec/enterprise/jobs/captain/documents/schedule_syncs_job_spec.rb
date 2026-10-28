@@ -49,6 +49,21 @@ RSpec.describe Captain::Documents::ScheduleSyncsJob, type: :job do
     end
   end
 
+  context 'when the account plan has no explicit interval' do
+    it 'syncs in the enterprise bucket with the enterprise cadence' do
+      planless_account = create(:account, custom_attributes: { plan_name: 'startup-extra' })
+      planless_account.enable_features!('captain_document_auto_sync')
+      planless_assistant = create(:captain_assistant, account: planless_account)
+      document = create(:captain_document, assistant: planless_assistant, account: planless_account, status: :available)
+      document.update!(sync_status: :synced, last_synced_at: 8.days.ago, last_sync_attempted_at: 8.days.ago)
+      clear_enqueued_jobs
+
+      described_class.new.perform('enterprise')
+
+      expect(Captain::Documents::PerformSyncJob).to have_been_enqueued.with(document)
+    end
+  end
+
   context 'when a plan name is passed' do
     it 'queues due documents only for that plan' do
       enterprise_account = create(:account, custom_attributes: { plan_name: 'Enterprise' })

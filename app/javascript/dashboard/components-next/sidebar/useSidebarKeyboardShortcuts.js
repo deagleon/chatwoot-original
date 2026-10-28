@@ -33,6 +33,12 @@ export function useSidebarKeyboardShortcuts(toggleShortcutModalFn) {
     'Alt+KeyS': {
       action: () => navigateToRoute('agent_list'),
     },
+    'g>p': {
+      action: () => navigateToRoute('pipelines_index'),
+    },
+    'g>l': {
+      action: () => navigateToRoute('contacts_dashboard_labels_index'),
+    },
   };
 
   return useKeyboardEvents(keyboardEvents);

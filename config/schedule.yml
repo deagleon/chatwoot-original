@@ -2,8 +2,13 @@
 # use https://crontab.guru/ to validate
 # validations for this file exist in /spec/configs/schedule_spec.rb
 
-# executed daily at 0000 UTC
-# schedules daily deferred jobs at stable times for each installation
+# Recover committed monitor work after interrupted jobs or enqueue failures.
+dispatch_conversation_monitors_job:
+  cron: '* * * * *'
+  class: 'Internal::DispatchConversationMonitorsJob'
+  queue: scheduled_jobs
+
+# executed daily at 0000 UTC; schedules deferred jobs at stable times for each installation
 internal_check_new_versions_job:
   cron: '0 0 * * *'
   class: 'Internal::TriggerDailyScheduledItemsJob'
@@ -14,16 +19,41 @@ trigger_scheduled_items_job:
   class: 'TriggerScheduledItemsJob'
   queue: scheduled_jobs
 
+# executed At every 5th minute by default, AUTO_RESOLVE_CRON overrides it
+trigger_conversations_resolution_job:
+  cron: <%= ENV.fetch('AUTO_RESOLVE_CRON', '*/5 * * * *').to_json %>
+  class: 'Account::ConversationsResolutionSchedulerJob'
+  queue: scheduled_jobs
+
 # executed hourly for scheduled jobs that do not need minute-level cadence
 trigger_hourly_scheduled_items_job:
   cron: '0 * * * *'
   class: 'Internal::TriggerHourlyScheduledItemsJob'
   queue: scheduled_jobs
 
+# executed every 30 seconds
+# ends calls that have rung past their provider's timeout
+voice_ringing_timeout_job:
+  cron: '*/30 * * * * *'
+  class: 'Internal::CheckRingingTimeoutsJob'
+  queue: scheduled_jobs
+
 # executed At every minute..
 trigger_imap_email_inboxes_job:
   cron: '*/1 * * * *'
   class: 'Inboxes::FetchImapEmailInboxesJob'
+  queue: scheduled_jobs
+
+# executed At every minute.. — sweep dedicado de mensagens agendadas (não usar TriggerScheduledItemsJob)
+scheduled_messages_trigger_due_job:
+  cron: '*/1 * * * *'
+  class: 'ScheduledMessages::TriggerDueJob'
+  queue: scheduled_jobs
+
+# sweep de regras de limpeza diária de colunas de pipeline
+stage_cleanup_rules_trigger_due_job:
+  cron: '*/5 * * * *'
+  class: 'StageCleanupRules::TriggerDueJob'
   queue: scheduled_jobs
 
 # executed daily at 2230 UTC

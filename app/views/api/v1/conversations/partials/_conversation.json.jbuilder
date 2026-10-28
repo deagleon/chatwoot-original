@@ -12,12 +12,13 @@ json.meta do
       json.partial! 'api/v1/models/agent_bot_slim', formats: [:json], resource: conversation.assigned_entity
     end
     json.assignee_type 'AgentBot'
-  elsif conversation.assigned_entity&.account
+  elsif conversation.assigned_entity.is_a?(User)
     json.assignee do
       json.partial! 'api/v1/models/agent', formats: [:json], resource: conversation.assigned_entity
     end
     json.assignee_type 'User'
   end
+  json.partial! 'enterprise/api/v1/conversations/partials/assignee', conversation: conversation if ChatwootApp.enterprise?
   if conversation.team.present?
     json.team do
       json.partial! 'api/v1/models/team', formats: [:json], resource: conversation.team
@@ -27,13 +28,18 @@ json.meta do
 end
 
 json.id conversation.display_id
-if conversation.messages.where(account_id: conversation.account_id).last.blank?
+# The dashboard seeds the message thread from this array and then paginates BACKWARD
+# by id (before: messages[0].id). Keep the seed as the chronologically latest message,
+# but add an id tiebreaker: without it, same-second siblings (e.g. the input_csat survey
+# created alongside activity messages during an auto-resolve burst) could resolve to a
+# lower-id activity, and backward pagination would then never load the higher-id survey.
+last_message = conversation.messages.where(account_id: conversation.account_id)
+                           .includes([{ attachments: [{ file_attachment: [:blob] }] }])
+                           .reorder(created_at: :desc, id: :desc).first
+if last_message.blank?
   json.messages []
 else
-  json.messages [
-    conversation.messages.where(account_id: conversation.account_id)
-                .includes([{ attachments: [{ file_attachment: [:blob] }] }]).last.try(:push_event_data)
-  ]
+  json.messages [last_message.try(:push_event_data)]
 end
 
 json.account_id conversation.account_id
@@ -57,7 +63,12 @@ json.unread_count conversation.unread_incoming_messages.count
 json.last_non_activity_message conversation.messages.where(account_id: conversation.account_id).non_activity_messages.first.try(:push_event_data)
 json.last_activity_at conversation.last_activity_at.to_i
 json.priority conversation.priority
-json.waiting_since conversation.waiting_since.to_i.to_i
+json.pipeline_stage_id conversation.pipeline_stage_id
+json.pipeline_stage_changed_at conversation.pipeline_stage_changed_at
+json.trello_card_id conversation.trello_card_id
+# Populado apenas quando a query seleciona o alias (ex.: board com scope/select) — sino em A4.
+json.pending_scheduled_message_count conversation.pending_scheduled_message_count if conversation.respond_to?(:pending_scheduled_message_count)
+ json.waiting_since conversation.waiting_since.to_i.to_i
 sla_applicable = conversation.account.feature_enabled?('sla') && (!conversation.respond_to?(:sla_applicable?) || conversation.sla_applicable?)
 json.sla_policy_id sla_applicable ? conversation.sla_policy_id : nil
 json.partial! 'enterprise/api/v1/conversations/partials/conversation', conversation: conversation if ChatwootApp.enterprise?

@@ -36,7 +36,6 @@ openai:
       'properties':
         {
           'api_key': { 'type': 'string' },
-          'label_suggestion': { 'type': 'boolean' },
         },
       'required': ['api_key'],
       'additionalProperties': false,
@@ -49,14 +48,14 @@ openai:
         'name': 'api_key',
         'validation': 'required',
       },
-      {
-        'label': 'Show label suggestions',
-        'type': 'checkbox',
-        'name': 'label_suggestion',
-        'validation': '',
-      },
     ]
-  visible_properties: ['label_suggestion']
+stripe:
+  id: stripe
+  logo: stripe.svg
+  i18n_key: stripe
+  hook_type: account
+  allow_multiple_hooks: false
+  visible_properties: []
 linear:
   id: linear
   logo: linear.png
@@ -79,7 +78,16 @@ slack:
   action: https://slack.com/oauth/v2/authorize?scope=commands,chat:write,channels:read,channels:manage,channels:join,groups:read,groups:write,im:write,mpim:write,users:read,users:read.email,chat:write.customize,channels:history,groups:history,mpim:history,im:history,files:read,files:write
   hook_type: account
   allow_multiple_hooks: false
-  visible_properties: ['channel_name']
+  visible_properties: ['channel_name', 'message_mode']
+  settings_json_schema:
+    {
+      'type': 'object',
+      'properties':
+        {
+          'channel_name': { 'type': 'string' },
+          'message_mode': { 'type': 'string', 'enum': ['two_way', 'alert'] },
+        },
+    }
 dialogflow:
   id: dialogflow
   logo: dialogflow.png
@@ -328,3 +336,28 @@ leadsquared:
       'conversation_activity_score',
       'transcript_activity_score',
     ]
+
+trello:
+  id: trello
+  feature_flag: trello_integration
+  logo: trello.png
+  i18n_key: trello
+  hook_type: account
+  allow_multiple_hooks: true
+  settings_json_schema:
+    {
+      'type': 'object',
+      'properties':
+        {
+          'api_key': { 'type': 'string' },
+          'board_id': { 'type': 'string' },
+          'board_name': { 'type': 'string' },
+          'webhook_secret': { 'type': 'string' },
+          'webhook_id': { 'type': 'string' },
+          'member_id': { 'type': 'string' },
+          'whatsapp_inbox_id': { 'type': 'string' },
+        },
+      'required': ['api_key', 'board_id', 'whatsapp_inbox_id'],
+      'additionalProperties': false,
+    }
+  visible_properties: ['board_id', 'board_name', 'whatsapp_inbox_id']

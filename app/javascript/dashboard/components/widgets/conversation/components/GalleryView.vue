@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, useTemplateRef } from 'vue';
+import { ref, computed, watch, onMounted, useTemplateRef } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useAlert } from 'dashboard/composables';
 
@@ -165,21 +165,40 @@ const keyboardEvents = {
 
 useKeyboardEvents(keyboardEvents);
 
+const galleryDialog = useTemplateRef('galleryDialog');
+
+// O preview do board usa <dialog>.showModal() (top layer do browser) e o
+// woot-modal antigo ficava atrás dele. Um <dialog> nativo entra no top layer
+// por cima de qualquer outro dialog já aberto.
+const closeGallery = () => {
+  show.value = false;
+  emit('close');
+};
+
+watch(show, value => {
+  if (value && galleryDialog.value && !galleryDialog.value.open) {
+    galleryDialog.value.showModal();
+  } else if (!value && galleryDialog.value?.open) {
+    galleryDialog.value.close();
+  }
+});
+
 onMounted(() => {
   setImageAndVideoSrc(props.attachment);
+  if (show.value) galleryDialog.value?.showModal();
 });
 </script>
 
 <template>
   <TeleportWithDirection to="body">
-    <woot-modal
-      v-model:show="show"
-      full-width
-      :show-close-button="false"
-      :on-close="onClose"
+    <dialog
+      ref="galleryDialog"
+      class="w-full h-full max-w-none max-h-none m-0 p-0 border-0 bg-transparent backdrop:bg-n-alpha-black2 backdrop:backdrop-blur-[4px]"
+      @cancel.prevent="closeGallery"
+      @close="closeGallery"
     >
       <div
-        class="bg-n-background flex flex-col h-[inherit] w-[inherit] overflow-hidden select-none"
+        class="bg-n-background flex flex-col h-full w-full overflow-hidden select-none"
         @click="onClose"
       >
         <header
@@ -198,7 +217,7 @@ onMounted(() => {
               rounded-full
               class="flex-shrink-0"
             />
-            <div class="flex flex-col ml-2 rtl:ml-0 rtl:mr-2 overflow-hidden">
+            <div class="flex flex-col ms-2 overflow-hidden">
               <h3 class="text-base leading-5 m-0 font-medium">
                 <span
                   class="overflow-hidden text-n-slate-12 whitespace-nowrap text-ellipsis"
@@ -220,7 +239,7 @@ onMounted(() => {
             <span v-dompurify-html="fileNameFromDataUrl" class="truncate" />
           </div>
 
-          <div class="flex items-center gap-2 ml-2 shrink-0">
+          <div class="flex items-center gap-2 ms-2 shrink-0">
             <NextButton
               v-if="isImage"
               icon="i-lucide-zoom-in"
@@ -359,6 +378,6 @@ onMounted(() => {
           </div>
         </footer>
       </div>
-    </woot-modal>
+    </dialog>
   </TeleportWithDirection>
 </template>

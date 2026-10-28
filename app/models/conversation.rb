@@ -2,55 +2,65 @@
 #
 # Table name: conversations
 #
-#  id                     :integer          not null, primary key
-#  additional_attributes  :jsonb
-#  agent_last_seen_at     :datetime
-#  assignee_last_seen_at  :datetime
-#  cached_label_list      :text
-#  contact_last_seen_at   :datetime
-#  custom_attributes      :jsonb
-#  first_reply_created_at :datetime
-#  identifier             :string
-#  last_activity_at       :datetime         not null
-#  priority               :integer
-#  snoozed_until          :datetime
-#  status                 :integer          default("open"), not null
-#  status_changed_at      :datetime
-#  uuid                   :uuid             not null
-#  waiting_since          :datetime
-#  created_at             :datetime         not null
-#  updated_at             :datetime         not null
-#  account_id             :integer          not null
-#  assignee_agent_bot_id  :bigint
-#  assignee_id            :integer
-#  campaign_id            :bigint
-#  contact_id             :bigint
-#  contact_inbox_id       :bigint
-#  display_id             :integer          not null
-#  inbox_id               :integer          not null
-#  sla_policy_id          :bigint
-#  team_id                :bigint
+#  id                        :integer          not null, primary key
+#  additional_attributes     :jsonb
+#  ai_assignee_type          :string
+#  agent_last_seen_at        :datetime
+#  ai_assignee_type          :string
+#  assignee_last_seen_at     :datetime
+#  cached_label_list         :text
+#  contact_last_seen_at      :datetime
+#  custom_attributes         :jsonb
+#  first_reply_created_at    :datetime
+#  identifier                :string
+#  last_activity_at          :datetime         not null
+#  pipeline_stage_changed_at :datetime
+#  priority                  :integer
+#  snoozed_until             :datetime
+#  status                    :integer          default("open"), not null
+#  status_changed_at         :datetime
+#  uuid                      :uuid             not null
+#  waiting_since             :datetime
+#  created_at                :datetime         not null
+#  updated_at                :datetime         not null
+#  account_id                :integer          not null
+#  assignee_agent_bot_id     :bigint
+#  assignee_id               :integer
+#  campaign_id               :bigint
+#  contact_id                :bigint
+#  contact_inbox_id          :bigint
+#  display_id                :integer          not null
+#  inbox_id                  :integer          not null
+#  pipeline_stage_id         :bigint
+#  sla_policy_id             :bigint
+#  team_id                   :bigint
+#  trello_card_id            :string
 #
 # Indexes
 #
-#  conv_acid_inbid_stat_asgnid_idx                    (account_id,inbox_id,status,assignee_id)
-#  index_conversations_on_account_id                  (account_id)
-#  index_conversations_on_account_id_and_display_id   (account_id,display_id) UNIQUE
-#  index_conversations_on_assignee_id_and_account_id  (assignee_id,account_id)
-#  index_conversations_on_campaign_id                 (campaign_id)
-#  index_conversations_on_contact_id                  (contact_id)
-#  index_conversations_on_contact_inbox_id            (contact_inbox_id)
-#  index_conversations_on_created_at                  (created_at)
-#  index_conversations_on_first_reply_created_at      (first_reply_created_at)
-#  index_conversations_on_id_and_account_id           (account_id,id)
-#  index_conversations_on_identifier_and_account_id   (identifier,account_id)
-#  index_conversations_on_inbox_id                    (inbox_id)
-#  index_conversations_on_priority                    (priority)
-#  index_conversations_on_status_and_account_id       (status,account_id)
-#  index_conversations_on_status_and_priority         (status,priority)
-#  index_conversations_on_team_id                     (team_id)
-#  index_conversations_on_uuid                        (uuid) UNIQUE
-#  index_conversations_on_waiting_since               (waiting_since)
+#  conv_acid_inbid_stat_asgnid_idx                       (account_id,inbox_id,status,assignee_id)
+#  index_conversations_on_account_id                     (account_id)
+#  index_conversations_on_account_id_and_display_id      (account_id,display_id) UNIQUE
+#  index_conversations_on_account_id_and_trello_card_id  (account_id,trello_card_id) UNIQUE WHERE (trello_card_id IS NOT NULL)
+#  index_conversations_on_account_id_status_created_at   (account_id,status,created_at)
+#  index_conversations_on_assignee_id_and_account_id     (assignee_id,account_id)
+#  index_conversations_on_campaign_id                    (campaign_id)
+#  index_conversations_on_contact_id                     (contact_id)
+#  index_conversations_on_contact_inbox_id               (contact_inbox_id)
+#  index_conversations_on_created_at                     (created_at)
+#  index_conversations_on_first_reply_created_at         (first_reply_created_at)
+#  index_conversations_on_id_and_account_id              (account_id,id)
+#  index_conversations_on_identifier_and_account_id      (identifier,account_id)
+#  index_conversations_on_inbox_id                       (inbox_id)
+#  index_conversations_on_pipeline_stage_id              (pipeline_stage_id)
+#  index_conversations_on_priority                       (priority)
+#  index_conversations_on_stage_changed_at               (account_id,pipeline_stage_id,pipeline_stage_changed_at)
+#  index_conversations_on_stage_last_activity            (account_id,pipeline_stage_id,last_activity_at,id)
+#  index_conversations_on_status_and_account_id          (status,account_id)
+#  index_conversations_on_status_and_priority            (status,priority)
+#  index_conversations_on_team_id                        (team_id)
+#  index_conversations_on_uuid                           (uuid) UNIQUE
+#  index_conversations_on_waiting_since                  (waiting_since)
 #
 
 class Conversation < ApplicationRecord
@@ -81,12 +91,13 @@ class Conversation < ApplicationRecord
   validates :custom_attributes, jsonb_attributes_length: true
   validates :uuid, uniqueness: true
   validate :validate_referer_url
+  validate :validate_pipeline_stage_account
 
   enum status: { open: 0, resolved: 1, pending: 2, snoozed: 3 }
   enum priority: { low: 0, medium: 1, high: 2, urgent: 3 }
 
-  scope :unassigned, -> { where(assignee_id: nil) }
-  scope :assigned, -> { where.not(assignee_id: nil) }
+  scope :unassigned, -> { where(assignee_id: nil, assignee_agent_bot_id: nil) }
+  scope :assigned, -> { where.not(assignee_id: nil).or(where.not(assignee_agent_bot_id: nil)) }
   scope :assigned_to, ->(agent) { where(assignee_id: agent.id) }
   scope :sort_on_unread, lambda { |_direction|
     order(unread_messages_count_arel.desc).sort_on_last_activity_at('desc')
@@ -113,11 +124,16 @@ class Conversation < ApplicationRecord
   belongs_to :account
   belongs_to :inbox
   belongs_to :assignee, class_name: 'User', optional: true, inverse_of: :assigned_conversations
-  belongs_to :assignee_agent_bot, class_name: 'AgentBot', optional: true
+  belongs_to :ai_assignee,
+             polymorphic: true,
+             foreign_key: :assignee_agent_bot_id,
+             foreign_type: :ai_assignee_type,
+             optional: true
   belongs_to :contact
   belongs_to :contact_inbox
   belongs_to :team, optional: true
   belongs_to :campaign, optional: true
+  belongs_to :pipeline_stage, class_name: 'PipelineStage', optional: true, inverse_of: :conversations
 
   has_many :mentions, dependent: :destroy_async
   has_many :messages, dependent: :destroy_async, autosave: true
@@ -127,11 +143,14 @@ class Conversation < ApplicationRecord
   has_many :attachments, through: :messages
   has_many :reporting_events, dependent: :destroy_async
   has_many :automation_rule_pending_executions, dependent: :delete_all
+  has_many :scheduled_messages, dependent: :nullify
 
   before_save :ensure_snooze_until_reset
   before_save :set_status_changed_at
+  before_save :set_pipeline_stage_changed_at
   before_create :determine_conversation_status
   before_create :ensure_waiting_since
+  after_create :mark_contact_as_lead
 
   after_update_commit :execute_after_update_commit_callbacks
   after_create_commit :notify_conversation_creation
@@ -175,9 +194,17 @@ class Conversation < ApplicationRecord
     save
   end
 
+  def move_to_stage!(stage)
+    update!(pipeline_stage: stage)
+  end
+
   def bot_handoff!(dispatch_event: true)
+    # Best-effort eligibility check, not a lock against concurrent takeovers.
+    # The dashboard checks assignment/status again before playing the alert.
+    return false unless pending?
+
     update(waiting_since: Time.current) if waiting_since.blank?
-    self.assignee_agent_bot = nil
+    self.ai_assignee = nil
     open!
     dispatch_bot_handoff_event if dispatch_event
   end
@@ -212,14 +239,14 @@ class Conversation < ApplicationRecord
 
   # Virtual attribute till we switch completely to polymorphic assignee
   def assignee_type
-    return 'AgentBot' if assignee_agent_bot_id.present?
+    return ai_assignee_type if ai_assignee_type.present?
     return 'User' if assignee_id.present?
 
     nil
   end
 
   def assigned_entity
-    assignee_agent_bot || assignee
+    ai_assignee || assignee
   end
 
   def tweet?
@@ -285,8 +312,16 @@ class Conversation < ApplicationRecord
     self.status_changed_at = Time.current if new_record? || status_changed?
   end
 
+  def set_pipeline_stage_changed_at
+    self.pipeline_stage_changed_at = Time.current if new_record? || pipeline_stage_id_changed?
+  end
+
   def ensure_waiting_since
     self.waiting_since = created_at
+  end
+
+  def mark_contact_as_lead
+    contact.update(contact_type: :lead) if contact.visitor?
   end
 
   def validate_additional_attributes
@@ -296,7 +331,7 @@ class Conversation < ApplicationRecord
   def reset_agent_bot_when_assignee_present
     return if assignee_id.blank?
 
-    self.assignee_agent_bot_id = nil
+    self.ai_assignee = nil
   end
 
   def determine_conversation_status
@@ -316,7 +351,7 @@ class Conversation < ApplicationRecord
     self.status = :pending
     return unless inbox.agent_bot_inbox&.active? && assignee_id.blank?
 
-    self.assignee_agent_bot = inbox.agent_bot
+    self.ai_assignee = inbox.agent_bot
   end
 
   def notify_conversation_creation
@@ -336,8 +371,8 @@ class Conversation < ApplicationRecord
   end
 
   def list_of_keys
-    %w[team_id assignee_id assignee_agent_bot_id status snoozed_until custom_attributes label_list waiting_since
-       first_reply_created_at priority]
+    %w[team_id assignee_id assignee_agent_bot_id ai_assignee_type status snoozed_until custom_attributes label_list waiting_since
+       first_reply_created_at priority pipeline_stage_id]
   end
 
   def allowed_keys?
@@ -418,6 +453,13 @@ class Conversation < ApplicationRecord
     return unless additional_attributes['referer']
 
     self['additional_attributes']['referer'] = nil unless url_valid?(additional_attributes['referer'])
+  end
+
+  def validate_pipeline_stage_account
+    return if pipeline_stage_id.blank?
+    return if pipeline_stage&.pipeline&.account_id == account_id
+
+    errors.add(:pipeline_stage, 'must belong to the same account')
   end
 
   # creating db triggers

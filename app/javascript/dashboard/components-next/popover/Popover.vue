@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch, nextTick } from 'vue';
+import { ref, computed, watch, nextTick, onMounted } from 'vue';
 import { vOnClickOutside } from '@vueuse/components';
 import {
   useBreakpoints,
@@ -32,10 +32,22 @@ const props = defineProps({
 
 const emit = defineEmits(['show', 'hide']);
 
+defineOptions({ inheritAttrs: false });
+
 const isActive = ref(false);
 const triggerRef = ref(null);
 const popoverRef = ref(null);
 const mobileContentRef = ref(null);
+
+const dialogTarget = ref(null);
+
+onMounted(() => {
+  dialogTarget.value = triggerRef.value?.closest('dialog') || null;
+});
+
+const teleportTarget = computed(
+  () => dialogTarget.value || triggerRef.value?.closest('dialog') || 'body'
+);
 
 const breakpoints = useBreakpoints(breakpointsTailwind);
 const belowMd = breakpoints.smaller('md');
@@ -107,9 +119,23 @@ const clickOutsideIgnore = [
   '[data-popover-content]',
 ];
 
+// An overlay opened from inside the popover teleports out of it, so its own Escape handler
+// registers after this one and cannot stop it. Leave Escape to whichever overlay the key
+// was pressed in; closing the popover out from under it would discard the work in progress.
+const isNestedOverlay = event => {
+  const overlay = event.target?.closest?.(clickOutsideIgnore.join(','));
+  return Boolean(
+    overlay &&
+      overlay !== popoverRef.value &&
+      overlay !== mobileContentRef.value
+  );
+};
+
 useKeyboardEvents({
   Escape: {
-    action: () => isActive.value && hide(),
+    action: event => {
+      if (isActive.value && !isNestedOverlay(event)) hide();
+    },
     allowOnFocusedInput: true,
   },
 });
@@ -118,11 +144,11 @@ defineExpose({ show, hide, toggle });
 </script>
 
 <template>
-  <span ref="triggerRef" class="inline-flex" @click="toggle">
+  <span ref="triggerRef" v-bind="$attrs" class="inline-flex" @click="toggle">
     <slot :is-open="isActive" />
   </span>
 
-  <TeleportWithDirection to="body">
+  <TeleportWithDirection :to="teleportTarget">
     <!-- Mobile: centered modal with backdrop -->
     <div
       v-if="isActive && isMobile"

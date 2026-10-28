@@ -2,6 +2,10 @@ require 'rails_helper'
 
 RSpec.describe 'Platform Accounts API', type: :request do
   let!(:account) { create(:account) }
+  # Captain features are enabled by default on every new account in this fork.
+  let(:expected_features) do
+    %w[inbox_management ip_lookup help_center captain_integration captain_integration_v2 captain_document_auto_sync custom_tools]
+  end
 
   describe 'POST /platform/api/v1/accounts' do
     context 'when it is an unauthenticated platform app' do
@@ -61,9 +65,9 @@ RSpec.describe 'Platform Accounts API', type: :request do
 
         json_response = response.parsed_body
         created_account = Account.find(json_response['id'])
-        expect(created_account.enabled_features.keys).to match_array(%w[inbox_management ip_lookup help_center])
+        expect(created_account.enabled_features.keys).to match_array(expected_features)
         expect(json_response['name']).to include('Test Account')
-        expect(json_response['features'].keys).to match_array(%w[inbox_management ip_lookup help_center])
+        expect(json_response['features'].keys).to match_array(expected_features)
       end
 
       it 'creates an account with limits settings' do
@@ -192,7 +196,7 @@ RSpec.describe 'Platform Accounts API', type: :request do
         expect(response).to have_http_status(:success)
         account.reload
         expect(account.name).to eq('Test Account')
-        expect(account.enabled_features.keys).to match_array(%w[inbox_management ip_lookup help_center])
+        expect(account.enabled_features.keys).to match_array(expected_features)
         expect(account.enabled_features['channel_facebook']).to be_nil
         expect(account.limits['agents']).to eq(5)
         expect(account.limits['inboxes']).to eq(10)

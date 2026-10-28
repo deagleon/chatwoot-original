@@ -19,6 +19,7 @@ import SidebarChangelogCard from './SidebarChangelogCard.vue';
 import SidebarChangelogButton from './SidebarChangelogButton.vue';
 import ChannelLeaf from './ChannelLeaf.vue';
 import ChannelIcon from 'next/icon/ChannelIcon.vue';
+import EmojiIcon from 'next/emoji-icon-picker/EmojiIcon.vue';
 import SidebarAccountSwitcher from './SidebarAccountSwitcher.vue';
 import Logo from 'next/icon/Logo.vue';
 import ComposeConversation from 'dashboard/components-next/NewConversation/ComposeConversation.vue';
@@ -69,6 +70,14 @@ const isFeatureEnabledonAccount = useMapGetter(
   'accounts/isFeatureEnabledonAccount'
 );
 
+const isMonitorsAvailable = computed(
+  () =>
+    (isOnChatwootCloud.value || isEnterprise) &&
+    [FEATURE_FLAGS.REPORTS, FEATURE_FLAGS.CONVERSATION_MONITORS].every(flag =>
+      isFeatureEnabledonAccount.value(accountId.value, flag)
+    )
+);
+
 const hasAdvancedAssignment = computed(() => {
   return isFeatureEnabledonAccount.value(
     accountId.value,
@@ -97,6 +106,13 @@ const hasDataImport = computed(() => {
   return isFeatureEnabledonAccount.value(
     accountId.value,
     FEATURE_FLAGS.DATA_IMPORT
+  );
+});
+
+const hasPipelines = computed(() => {
+  return isFeatureEnabledonAccount.value(
+    accountId.value,
+    FEATURE_FLAGS.PIPELINES
   );
 });
 
@@ -443,6 +459,13 @@ const menuItems = computed(() => {
             name: `${team.name}-${team.id}`,
             label: team.name,
             badgeCount: getTeamUnreadCount.value(team.id),
+            icon: team.icon
+              ? h(EmojiIcon, {
+                  value: team.icon,
+                  color: team.icon_color,
+                  class: 'size-3.5',
+                })
+              : undefined,
             to: accountScopedRoute('team_conversations', { teamId: team.id }),
           })),
         },
@@ -552,7 +575,7 @@ const menuItems = computed(() => {
         {
           name: 'Tools',
           label: t('SIDEBAR.CAPTAIN_TOOLS'),
-          activeOn: ['captain_tools_index'],
+          activeOn: ['captain_tools_index', 'captain_tools_explore'],
           to: accountScopedRoute('captain_assistants_index', {
             navigationPath: 'captain_tools_index',
           }),
@@ -562,6 +585,9 @@ const menuItems = computed(() => {
           label: t('SIDEBAR.CAPTAIN_SETTINGS'),
           activeOn: [
             'captain_assistants_settings_index',
+            'captain_assistants_settings_system_index',
+            'captain_assistants_settings_audience_index',
+            'captain_assistants_settings_schedule_index',
             'captain_assistants_guidelines_index',
             'captain_assistants_guardrails_index',
           ],
@@ -579,6 +605,17 @@ const menuItems = computed(() => {
             icon: 'i-lucide-phone',
             to: accountScopedRoute('calls_dashboard_index'),
             activeOn: ['calls_dashboard_index'],
+          },
+        ]
+      : []),
+    ...(hasPipelines.value
+      ? [
+          {
+            name: 'Pipelines',
+            label: t('SIDEBAR.PIPELINES'),
+            icon: 'i-lucide-kanban',
+            to: accountScopedRoute('pipelines_index'),
+            activeOn: ['pipelines_index', 'pipelines_board'],
           },
         ]
       : []),
@@ -697,6 +734,16 @@ const menuItems = computed(() => {
           label: t('SIDEBAR.REPORTS_BOT'),
           to: accountScopedRoute('bot_reports'),
         },
+        ...(isMonitorsAvailable.value
+          ? [
+              {
+                name: 'Monitors',
+                label: t('MONITORS.TITLE'),
+                to: accountScopedRoute('monitor_reports_index'),
+                activeOn: ['monitor_reports_show'],
+              },
+            ]
+          : []),
       ],
     },
     {
